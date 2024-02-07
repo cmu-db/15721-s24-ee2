@@ -6,3 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+substrait = "0.24.1"
+prost = "0.12"
+prost-types = "0.12"
+protoc-rust = "2.28.0"
