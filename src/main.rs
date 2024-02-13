@@ -3,8 +3,15 @@ use std::env;
 use std::process::exit;
 use prost::Message;
 use substrait::proto;
-use substrait::proto::Plan;
+use substrait::proto::expression::field_reference::ReferenceType;
+use substrait::proto::expression::reference_segment;
+use substrait::proto::expression::Literal;
+use substrait::proto::extensions::SimpleExtensionDeclaration;
+use substrait::proto::{Expression,Plan};
 use substrait::proto::{plan_rel,Rel,rel::RelType};
+use substrait::proto::expression::{MaskExpression,RexType};
+use substrait::proto::extensions::simple_extension_declaration::MappingType;
+use substrait::proto::function_argument::ArgType;
 use substrait::proto::r#type::Kind;
 
 fn print_helper(str: &str, indent: usize) {
@@ -62,138 +69,220 @@ fn print_readtype(rt: &proto::read_rel::ReadType, indent: usize, prefix: &str) {
     println!("");
 }
 
-fn print_maskexpression(maskexpr: Option<&proto::expression::MaskExpression>, indent: usize, prefix: &str) {
-    print!("{}{}", " ".repeat(indent), prefix);
-    if maskexpr.is_some() {
-        let me = maskexpr.unwrap();
-        let ss = me.select.as_ref().unwrap();
-        print!("[");
-        let items: &Vec<proto::expression::mask_expression::StructItem> = ss.struct_items.as_ref();
-        for item in items {
-            print!("{}, ", item.field);
+fn print_maskexpression(maskexpr: &MaskExpression) {
+    print!("mask[");
+    let ss = maskexpr.select.as_ref().unwrap();
+    let items: &Vec<proto::expression::mask_expression::StructItem> = ss.struct_items.as_ref();
+    for item in items {
+        print!("{}, ", item.field);
+    }
+    print!("]");
+}
+
+fn print_expression_literal(literal: &Literal) {
+    print!("({:?})", literal.literal_type.as_ref().unwrap());
+}
+
+fn print_expression(expr: &Expression, exts: &ExtensionLookupTable) {
+    match expr.rex_type.as_ref().unwrap() {
+        RexType::Literal(r) => {
+            print_expression_literal(r);
         }
-        println!("]")
-    }
-    else {
-        println!("None");
+        RexType::Selection(r) => {
+            print!("(");
+            let ref_type = r.reference_type.as_ref().unwrap();
+            match ref_type {
+                ReferenceType::DirectReference(seg) => {
+                    let ref_type2 = seg.reference_type.as_ref().unwrap();
+                    match ref_type2 {
+                        reference_segment::ReferenceType::MapKey(r) => {
+                            print!("mapkey ");
+                            print_expression_literal(r.map_key.as_ref().unwrap());
+                        }
+                        reference_segment::ReferenceType::StructField(r) => {
+                            print!("field {}", r.field);
+                        }
+                        reference_segment::ReferenceType::ListElement(r) => {
+                            print!("offset {}", r.offset);
+                        }
+                    }
+                }
+                ReferenceType::MaskedReference(masked) => {
+                    print_maskexpression(masked);
+                }
+            }
+            print!(")");
+        }
+        RexType::ScalarFunction(r) => {
+            let func_ref = r.function_reference;
+            print!("{}(", exts.functions[func_ref as usize]);
+            let arguments = &r.arguments;
+            for arg in arguments {
+                let arg_type = arg.arg_type.as_ref().unwrap();
+                match arg_type {
+                    ArgType::Enum(a) => {
+                        print!("{}", a);
+                    }
+                    ArgType::Type(a) => {
+                        print!("{}", type_to_str(a.kind.as_ref().unwrap()));
+                    }
+                    ArgType::Value(a) => {
+                        print_expression(a, exts);
+                    }
+                }
+                print!(", ");
+            }
+            print!(")");
+        }
+        RexType::WindowFunction(r) => {
+            print!("WindowFunction {:?}", r);
+        }
+        RexType::IfThen(r) => {
+            print!("IfThen {:?}", r);
+        }
+        RexType::SwitchExpression(r) => {
+            print!("SwitchExpression {:?}", r);
+        }
+        RexType::SingularOrList(r) => {
+            print!("SingularOrList {:?}", r);
+        }
+        RexType::MultiOrList(r) => {
+            print!("MultiOrList {:?}", r);
+        }
+        RexType::Cast(r) => {
+            print!("Cast {:?}", r);
+        }
+        RexType::Subquery(r) => {
+            print!("Subquery {:?}", r);
+        }
+        RexType::Nested(r) => {
+            print!("Nested {:?}", r);
+        }
+        RexType::Enum(r) => {
+            print!("Enum {:?}", r);
+        }
     }
 }
 
-fn print_expression(expr: Option<&proto::Expression>, indent: usize, prefix: &str) {
-    print!("{}{}", " ".repeat(indent), prefix);
-    if expr.is_some() {
-        let e = expr.unwrap();
-        println!("TODO {:?}", e);
-    }
-    else {
-        println!("None");
-    }
-}
-
-fn print_rel(rel: Rel, indent: usize) {
+fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
     if rel.rel_type.is_some() {
-        let rel_type = rel.rel_type.unwrap();
+        let rel_type = rel.rel_type.as_ref().unwrap();
         match rel_type {
             // Zero-input
-            #[allow(unused)]
             RelType::Read(r) => {
                 print_helper("Read", indent);
+                
                 // Table
                 print_readtype(r.read_type.as_ref().unwrap(), indent + 1, "table: ");
+                
                 // Schema
                 print_named_struct(r.base_schema.as_ref().unwrap(), indent + 1, "schema: ");
+                
                 // Filter
-                print_expression(r.filter.as_deref(), indent + 1, "filter: ");
+                print!("{}filter: ", " ".repeat(indent + 1));
+                if r.filter.as_deref().is_some() {
+                    print_expression(r.filter.as_deref().unwrap(), exts);
+                }
+                else {
+                    print!("None");
+                }
+                println!("");
+                
                 // Projection
-                print_maskexpression(r.projection.as_ref(), indent + 1, "projection: ");
+                print!("{}projection: ", " ".repeat(indent + 1));
+                if r.projection.as_ref().is_some() {
+                    print_maskexpression(r.projection.as_ref().unwrap());
+                }
+                else {
+                    print!("None")
+                }
+                println!("");
             }
-            #[allow(unused)]
             RelType::ExtensionLeaf(r) => {
                 print_helper("ExtensionLeaf", indent);
             }
-            #[allow(unused)]
             RelType::Ddl(r) => {
                 print_helper("Ddl", indent);
             }
             // One-input
             RelType::Filter(r) => {
                 print_helper("Filter", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Fetch(r) => {
                 print_helper("Fetch", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Aggregate(r) => {
                 print_helper("Aggregate", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             },
             RelType::Sort(r) => {
                 print_helper("Sort", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Project(r) => {
                 print_helper("Project", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::ExtensionSingle(r) => {
                 print_helper("ExtensionSingle", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Write(r) => {
                 print_helper("Write", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Window(r) => {
                 print_helper("Window", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Exchange(r) => {
                 print_helper("Exchange", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Expand(r) => {
                 print_helper("Expand", indent);
-                print_rel(*r.input.unwrap(), indent + 1);
+                print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             // Two-inputs
             RelType::Join(r) => {
                 print_helper("Join", indent);
-                print_rel(*r.left.unwrap(), indent + 1);
+                print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
                 print_helper("- with", indent);
-                print_rel(*r.right.unwrap(), indent + 1);
+                print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Cross(r) => {
                 print_helper("Cross", indent);
-                print_rel(*r.left.unwrap(), indent + 1);
+                print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
                 print_helper("- with", indent);
-                print_rel(*r.right.unwrap(), indent + 1);
+                print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::HashJoin(r) => {
                 print_helper("HashJoin", indent);
-                print_rel(*r.left.unwrap(), indent + 1);
+                print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
                 print_helper("- with", indent);
-                print_rel(*r.right.unwrap(), indent + 1);
+                print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::MergeJoin(r) => {
                 print_helper("MergeJoin", indent);
-                print_rel(*r.left.unwrap(), indent + 1);
+                print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
                 print_helper("- with", indent);
-                print_rel(*r.right.unwrap(), indent + 1);
+                print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::NestedLoopJoin(r) => {
                 print_helper("NestedLoopJoin", indent);
-                print_rel(*r.left.unwrap(), indent + 1);
+                print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
                 print_helper("- with", indent);
-                print_rel(*r.right.unwrap(), indent + 1);
+                print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             // Multiple-inputs
             RelType::Set(r) => {
                 print_helper("Set", indent);
                 let l = r.inputs.len();
                 let mut cnt = 0;
-                for i in r.inputs {
-                    print_rel(i, indent + 1);
+                for i in &r.inputs {
+                    print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
                         print_helper("- and", indent);
                     }
@@ -204,8 +293,8 @@ fn print_rel(rel: Rel, indent: usize) {
                 print_helper("ExtensionMulti", indent);
                 let l = r.inputs.len();
                 let mut cnt = 0;
-                for i in r.inputs {
-                    print_rel(i, indent + 1);
+                for i in &r.inputs {
+                    print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
                         print_helper("- and", indent);
                     }
@@ -222,20 +311,45 @@ fn print_rel(rel: Rel, indent: usize) {
     }
 }
 
-fn print_everything(plan: Plan) {
+fn print_everything(plan: &Plan, exts: &ExtensionLookupTable) {
     // relations
-    for planrel in plan.relations {
-        match planrel.rel_type.unwrap() {
+    for planrel in &plan.relations {
+        match planrel.rel_type.as_ref().unwrap() {
             plan_rel::RelType::Rel(rel) => {
-                print_rel(rel, 0);
+                print_rel(&rel, exts, 0);
             },
             plan_rel::RelType::Root(root) => {
                 println!("Root; names({:?})", root.names);
-                if root.input.is_some() {
-                    print_rel(root.input.unwrap(), 1);
-                }
+                print_rel(&root.input.as_ref().unwrap(), exts, 1);
             }
         }
+    }
+}
+
+struct ExtensionLookupTable {
+    functions: Vec<String>
+}
+
+fn parse_extensions(exts: &Vec<SimpleExtensionDeclaration>) -> ExtensionLookupTable {
+    let mut ext_funcs = Vec::new();
+    ext_funcs.push(String::from("invalid"));
+    for ext in exts {
+        match ext.mapping_type.as_ref().unwrap() {
+            MappingType::ExtensionType(e) => {
+
+            }
+            MappingType::ExtensionTypeVariation(e) => {
+
+            }
+            MappingType::ExtensionFunction(e) => {
+                let func_id = e.function_anchor;
+                assert_eq!(ext_funcs.len(), func_id as usize);
+                ext_funcs.push(e.name.clone());
+            }
+        }
+    }
+    ExtensionLookupTable{
+        functions: ext_funcs
     }
 }
 
@@ -251,6 +365,7 @@ fn main() {
     let plan = Plan::decode(code.as_slice()).unwrap();
     println!("{:?}\n", plan);
 
-    print_everything(plan)
+    let exts = parse_extensions(&plan.extensions);
+    print_everything(&plan, &exts);
 
 }
