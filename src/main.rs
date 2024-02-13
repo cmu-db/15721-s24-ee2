@@ -1,4 +1,6 @@
 use std::fs;
+use std::env;
+use std::process::exit;
 use prost::Message;
 use substrait::proto;
 use substrait::proto::Plan;
@@ -238,7 +240,13 @@ fn print_everything(plan: Plan) {
 }
 
 fn main() {
-    let filename = "query_generation/query.proto";
+    let filename = env::args().nth(1);
+    if filename.is_none() {
+        println!("Usage: cargo run -- proto_filename");
+        exit(1);
+    }
+    let filename = filename.unwrap();
+
     let code = fs::read(filename).unwrap();
     let plan = Plan::decode(code.as_slice()).unwrap();
     println!("{:?}\n", plan);
