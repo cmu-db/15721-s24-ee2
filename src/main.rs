@@ -2,8 +2,6 @@ use core::panic;
 use std::fs;
 use std::env;
 use std::process::exit;
-use std::collections::HashMap;
-use std::thread::current;
 use prost::Message;
 use substrait::proto;
 use substrait::proto::expression::field_reference::ReferenceType;
@@ -474,128 +472,179 @@ fn parse_extensions(exts: &Vec<SimpleExtensionDeclaration>) -> ExtensionLookupTa
 }
 
 struct Pipeline {
-    operators: Vec<String>
+    id: u32,
+    operators: Vec<String>,
+    sink: (u32, usize) // pipeline_id, op_id
 }
 
 fn parse_substrait_into_pipelines(plan: &Plan, exts: &ExtensionLookupTable) -> Vec<Pipeline> {
     let mut pipelines: Vec<Pipeline> = Vec::new();
 
-    let mut stack: Vec<&Rel> = Vec::new();
+    let mut stack: Vec<(&Rel, (u32, usize))> = Vec::new();
     
     for plan_rel in &plan.relations {
         match plan_rel.rel_type.as_ref().unwrap() {
             plan_rel::RelType::Root(root) => {
-                stack.push(&root.input.as_ref().unwrap());
+                stack.push((&root.input.as_ref().unwrap(), (0, 0)));
             }
             plan_rel::RelType::Rel(rel) => {
-                stack.push(rel);
+                stack.push((rel, (0, 0)));
             }
         }
     }
 
     let current_pipeline: &mut Vec<String> = &mut Vec::new();
+    let mut current_id: u32 = 0;
 
     while !stack.is_empty() {
-        let rel = stack.pop().unwrap();
+        let (rel, sink) = stack.pop().unwrap();
         match rel.rel_type.as_ref().unwrap() {
             // Zero-input: wrap current pipeline
             RelType::Read(_) => {
                 current_pipeline.push(String::from("Read"));
                 let wrapped_pipeline = std::mem::take(current_pipeline);
-                pipelines.push(Pipeline{operators: wrapped_pipeline});
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
             }
             RelType::ExtensionLeaf(_) => {
                 current_pipeline.push(String::from("ExtensionLeaf"));
                 let wrapped_pipeline = std::mem::take(current_pipeline);
-                pipelines.push(Pipeline{operators: wrapped_pipeline});
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
             }
             RelType::Reference(_) => {
                 current_pipeline.push(String::from("Reference"));
                 let wrapped_pipeline = std::mem::take(current_pipeline);
-                pipelines.push(Pipeline{operators: wrapped_pipeline});
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
             }
             RelType::Ddl(_) => {
                 current_pipeline.push(String::from("Ddl"));
                 let wrapped_pipeline = std::mem::take(current_pipeline);
-                pipelines.push(Pipeline{operators: wrapped_pipeline});
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
             }
-            // One-input: push child and continue
+            // One-input, no pipeline breaker: push child and continue
             RelType::Filter(r) => {
                 current_pipeline.push(String::from("Filter"));
-                stack.push(r.input.as_ref().unwrap());
+                stack.push((r.input.as_ref().unwrap(), sink));
             }
             RelType::Fetch(r) => {
                 current_pipeline.push(String::from("Fetch"));
-                stack.push(r.input.as_ref().unwrap());
-            }
-            RelType::Aggregate(r) => {
-                current_pipeline.push(String::from("Aggregate"));
-                stack.push(r.input.as_ref().unwrap());
-            }
-            RelType::Sort(r) => {
-                current_pipeline.push(String::from("Sort"));
-                stack.push(r.input.as_ref().unwrap());
+                stack.push((r.input.as_ref().unwrap(), sink));
             }
             RelType::Project(r) => {
                 current_pipeline.push(String::from("Project"));
-                stack.push(r.input.as_ref().unwrap());
+                stack.push((r.input.as_ref().unwrap(), sink));
+            }
+            // One-input, pipeline breaker: wrap current pipeline & push child
+            RelType::Aggregate(r) => {
+                current_pipeline.push(String::from("Aggregate"));
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
+            }
+            RelType::Sort(r) => {
+                current_pipeline.push(String::from("Sort"));
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
             RelType::ExtensionSingle(r) => {
                 current_pipeline.push(String::from("ExtensionSingle"));
-                stack.push(r.input.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
             RelType::Write(r) => {
                 current_pipeline.push(String::from("Write"));
-                stack.push(r.input.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
             RelType::Window(r) => {
                 current_pipeline.push(String::from("Window"));
-                stack.push(r.input.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
             RelType::Exchange(r) => {
                 current_pipeline.push(String::from("Exchange"));
-                stack.push(r.input.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
             RelType::Expand(r) => {
                 current_pipeline.push(String::from("Expand"));
-                stack.push(r.input.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{id: current_id, operators: wrapped_pipeline, sink: sink});
+                current_id = current_id + 1;
+                stack.push((r.input.as_ref().unwrap(), new_sink));
             }
-            // Multiple-inputs: push children in order
+            // Multiple-inputs: push children in order, only the rightmost child is not pipeline breaker
             RelType::Join(r) => {
                 current_pipeline.push(String::from("Join"));
-                stack.push(r.left.as_ref().unwrap());
-                stack.push(r.right.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                stack.push((r.left.as_ref().unwrap(), new_sink));
+                stack.push((r.right.as_ref().unwrap(), sink));
             }
             RelType::Cross(r) => {
                 current_pipeline.push(String::from("Cross"));
-                stack.push(r.left.as_ref().unwrap());
-                stack.push(r.right.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                stack.push((r.left.as_ref().unwrap(), new_sink));
+                stack.push((r.right.as_ref().unwrap(), sink));
             }
             RelType::HashJoin(r) => {
                 current_pipeline.push(String::from("HashJoin"));
-                stack.push(r.left.as_ref().unwrap());
-                stack.push(r.right.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                stack.push((r.left.as_ref().unwrap(), new_sink));
+                stack.push((r.right.as_ref().unwrap(), sink));
             }
             RelType::MergeJoin(r) => {
                 current_pipeline.push(String::from("MergeJoin"));
-                stack.push(r.left.as_ref().unwrap());
-                stack.push(r.right.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                stack.push((r.left.as_ref().unwrap(), new_sink));
+                stack.push((r.right.as_ref().unwrap(), sink));
             }
             RelType::NestedLoopJoin(r) => {
                 current_pipeline.push(String::from("NestedLoopJoin"));
-                stack.push(r.left.as_ref().unwrap());
-                stack.push(r.right.as_ref().unwrap());
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                stack.push((r.left.as_ref().unwrap(), new_sink));
+                stack.push((r.right.as_ref().unwrap(), sink));
             }
             RelType::Set(r) => {
                 current_pipeline.push(String::from("Set"));
-                for input in &r.inputs {
-                    stack.push(input);
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let l = r.inputs.len();
+                for i in 0..(l-1) {
+                    stack.push((&r.inputs[i], new_sink));
+                }
+                if l > 0 {
+                    stack.push((&r.inputs[l - 1], sink));
                 }
             }
             RelType::ExtensionMulti(r) => {
                 current_pipeline.push(String::from("ExtensionMulti"));
-                for input in &r.inputs {
-                    stack.push(input);
+                let new_sink = (current_id, current_pipeline.len() - 1);
+                let l = r.inputs.len();
+                for i in 0..(l-1) {
+                    stack.push((&r.inputs[i], new_sink));
+                }
+                if l > 0 {
+                    stack.push((&r.inputs[l - 1], sink));
                 }
             }
         }
@@ -607,8 +656,11 @@ fn parse_substrait_into_pipelines(plan: &Plan, exts: &ExtensionLookupTable) -> V
 fn print_pipelines(pipelines: &Vec<Pipeline>) {
     println!("== Pipelines ==");
     for pipeline in pipelines {
+        print!("{}: ({},{}) <- ", pipeline.id, pipeline.sink.0, pipeline.sink.1);
+        let mut op_id: u32 = 0;
         for op in &pipeline.operators {
-            print!("{} ", op);
+            print!("({}:{}) ", op_id, op);
+            op_id = op_id + 1;
         }
         println!("");
     }
