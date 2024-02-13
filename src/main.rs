@@ -7,6 +7,10 @@ use substrait::proto::expression::field_reference::ReferenceType;
 use substrait::proto::expression::reference_segment;
 use substrait::proto::expression::Literal;
 use substrait::proto::extensions::SimpleExtensionDeclaration;
+use substrait::proto::sort_field::SortKind;
+use substrait::proto::AggregateFunction;
+use substrait::proto::FunctionArgument;
+use substrait::proto::SortField;
 use substrait::proto::{Expression,Plan};
 use substrait::proto::{plan_rel,Rel,rel::RelType};
 use substrait::proto::expression::{MaskExpression,RexType};
@@ -69,6 +73,69 @@ fn print_readtype(rt: &proto::read_rel::ReadType, indent: usize, prefix: &str) {
     println!("");
 }
 
+fn print_sortfield(sort: &SortField, exts: &ExtensionLookupTable) {
+    print!("sort(");
+    if sort.expr.is_some() {
+        print_expression(sort.expr.as_ref().unwrap(), exts);
+        print!("; ");
+    }
+    else {
+        print!("None; ");
+    }
+    if sort.sort_kind.is_some() {
+        match sort.sort_kind.as_ref().unwrap() {
+            SortKind::Direction(sk) => {
+                // https://github.com/substrait-io/substrait/blob/main/proto/substrait/algebra.proto:1397
+                match *sk {
+                    1 => {print!("ASC_NULL_FIRST")}
+                    2 => {print!("ASC_NULL_LAST")}
+                    3 => {print!("DESC_NULL_FIRST")}
+                    4 => {print!("DESC_NULL_LAST")}
+                    5 => {print!("CLUSTERED")}
+                    _ => {print!("UNSPECIFIED")}
+                }
+            }
+            SortKind::ComparisonFunctionReference(sk) => {
+                print!("{}", exts.functions[*sk as usize]);
+            }
+        }
+        print!(")");
+    }
+    else {
+        print!("None)");
+    }
+}
+
+fn print_funcarg(arg: &FunctionArgument, exts: &ExtensionLookupTable) {
+    let arg_type = arg.arg_type.as_ref().unwrap();
+    match arg_type {
+        ArgType::Enum(a) => {
+            print!("{}", a);
+        }
+        ArgType::Type(a) => {
+            print!("{}", type_to_str(a.kind.as_ref().unwrap()));
+        }
+        ArgType::Value(a) => {
+            print_expression(a, exts);
+        }
+    }
+}
+
+fn print_aggregatefunc(aggfunc: &AggregateFunction, exts: &ExtensionLookupTable) {
+    let func_ref = aggfunc.function_reference;
+    print!("aggr {}(", exts.functions[func_ref as usize]);
+    for arg in &aggfunc.arguments {
+        print_funcarg(arg, exts);
+        print!(", ");
+    }
+    print!("; ");
+    for sort in &aggfunc.sorts {
+        print_sortfield(sort, exts);
+        print!(", ");
+    }
+    print!(")");
+}
+
 fn print_maskexpression(maskexpr: &MaskExpression) {
     print!("mask[");
     let ss = maskexpr.select.as_ref().unwrap();
@@ -118,18 +185,7 @@ fn print_expression(expr: &Expression, exts: &ExtensionLookupTable) {
             print!("{}(", exts.functions[func_ref as usize]);
             let arguments = &r.arguments;
             for arg in arguments {
-                let arg_type = arg.arg_type.as_ref().unwrap();
-                match arg_type {
-                    ArgType::Enum(a) => {
-                        print!("{}", a);
-                    }
-                    ArgType::Type(a) => {
-                        print!("{}", type_to_str(a.kind.as_ref().unwrap()));
-                    }
-                    ArgType::Value(a) => {
-                        print_expression(a, exts);
-                    }
-                }
+                print_funcarg(arg, exts);
                 print!(", ");
             }
             print!(")");
@@ -207,6 +263,11 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
             // One-input
             RelType::Filter(r) => {
                 print_helper("Filter", indent);
+                if r.condition.is_some() {
+                    print!("{}condition: ", " ".repeat(indent));
+                    print_expression(r.condition.as_ref().unwrap(), exts);
+                    println!("");
+                }
                 print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Fetch(r) => {
@@ -215,14 +276,45 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
             }
             RelType::Aggregate(r) => {
                 print_helper("Aggregate", indent);
+                print!("{}groups: [", " ".repeat(indent));
+                for gr in &r.groupings {
+                    print!("[");
+                    for expr in &gr.grouping_expressions {
+                        print_expression(expr, exts);
+                    }
+                    print!("]");
+                }
+                println!("]");
+                print!("{}measures: [", " ".repeat(indent));
+                for measure in &r.measures {
+                    print!("(");
+                    print_aggregatefunc(measure.measure.as_ref().unwrap(), exts);
+                    if measure.filter.is_some() {
+                        print!("; filter ");
+                        print_expression(measure.filter.as_ref().unwrap(), exts);
+                    }
+                    print!(")");
+                }
+                println!("]");
                 print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             },
             RelType::Sort(r) => {
                 print_helper("Sort", indent);
+                print!("{}sorts: [", " ".repeat(indent));
+                for sort in &r.sorts {
+                    print_sortfield(sort, exts);
+                    print!(", ");
+                }
+                println!("]");
                 print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Project(r) => {
                 print_helper("Project", indent);
+                print!("{}exprs: [", " ".repeat(indent));
+                for expr in &r.expressions {
+                    print_expression(expr, exts);
+                }
+                println!("]");
                 print_rel(&*r.input.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::ExtensionSingle(r) => {
@@ -248,32 +340,42 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
             // Two-inputs
             RelType::Join(r) => {
                 print_helper("Join", indent);
+                if r.expression.is_some() {
+                    print!("{}expr: ", " ".repeat(indent));
+                    print_expression(r.expression.as_ref().unwrap(), exts);
+                    println!("");
+                }
+                if r.post_join_filter.is_some() {
+                    print!("{}post-join-filter: ", " ".repeat(indent));
+                    print_expression(r.post_join_filter.as_ref().unwrap(), exts);
+                    println!("");
+                }
                 print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
-                print_helper("- with", indent);
+                print_helper("with", indent);
                 print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::Cross(r) => {
                 print_helper("Cross", indent);
                 print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
-                print_helper("- with", indent);
+                print_helper("with", indent);
                 print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::HashJoin(r) => {
                 print_helper("HashJoin", indent);
                 print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
-                print_helper("- with", indent);
+                print_helper("with", indent);
                 print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::MergeJoin(r) => {
                 print_helper("MergeJoin", indent);
                 print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
-                print_helper("- with", indent);
+                print_helper("with", indent);
                 print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             RelType::NestedLoopJoin(r) => {
                 print_helper("NestedLoopJoin", indent);
                 print_rel(&*r.left.as_ref().unwrap(), exts, indent + 1);
-                print_helper("- with", indent);
+                print_helper("with", indent);
                 print_rel(&*r.right.as_ref().unwrap(), exts, indent + 1);
             }
             // Multiple-inputs
@@ -284,7 +386,7 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
                 for i in &r.inputs {
                     print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
-                        print_helper("- and", indent);
+                        print_helper(",", indent);
                     }
                     cnt = cnt + 1;
                 }
@@ -296,7 +398,7 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
                 for i in &r.inputs {
                     print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
-                        print_helper("- and", indent);
+                        print_helper(",", indent);
                     }
                     cnt = cnt + 1;
                 }
@@ -363,7 +465,7 @@ fn main() {
 
     let code = fs::read(filename).unwrap();
     let plan = Plan::decode(code.as_slice()).unwrap();
-    println!("{:?}\n", plan);
+    //println!("{:?}\n", plan);
 
     let exts = parse_extensions(&plan.extensions);
     print_everything(&plan, &exts);

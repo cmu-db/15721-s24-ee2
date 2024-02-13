@@ -12,11 +12,11 @@ pip install duckdb==0.9.2
 ```shell
 make
 ```
-This command converts all sql files to proto files.
+This command converts all sql files to obj files.
 
-## Investigate proto
+## Investigate protobuf plan
 ```shell
-cargo run -- proto_file.proto
+cargo run -- protobuf_file.obj
 ```
 
 ## Writing a new sql test case
