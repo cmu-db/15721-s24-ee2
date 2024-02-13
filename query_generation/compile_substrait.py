@@ -24,6 +24,7 @@ with open(input_sql_file, "r") as qf:
             break
         else:
             con.execute(query = sql_line)
+assert query_to_parse != "", "Check if sql contains --PARSE line"
 
 # blob generation
 proto_bytes = con.get_substrait(query=query_to_parse).fetchone()[0]

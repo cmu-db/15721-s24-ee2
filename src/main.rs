@@ -381,12 +381,24 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
             // Multiple-inputs
             RelType::Set(r) => {
                 print_helper("Set", indent);
+                // https://github.com/substrait-io/substrait/blob/main/proto/substrait/algebra.proto:294
+                print!("{}op: ", " ".repeat(indent));
+                match r.op {
+                    1 => {print!("EXCEPT");}
+                    2 => {print!("EXCEPT MULTISET");}
+                    3 => {print!("INTERSECT");}
+                    4 => {print!("INTERSECPT MULTISET");}
+                    5 => {print!("UNION");}
+                    6 => {print!("UNION ALL");}
+                    _ => {print!("UNSPECIFIED");}
+                }
+                println!("");
                 let l = r.inputs.len();
                 let mut cnt = 0;
                 for i in &r.inputs {
                     print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
-                        print_helper(",", indent);
+                        print_helper("and", indent);
                     }
                     cnt = cnt + 1;
                 }
@@ -398,7 +410,7 @@ fn print_rel(rel: &Rel, exts: &ExtensionLookupTable, indent: usize) {
                 for i in &r.inputs {
                     print_rel(&i, exts, indent + 1);
                     if cnt < (l - 1) {
-                        print_helper(",", indent);
+                        print_helper("and", indent);
                     }
                     cnt = cnt + 1;
                 }
@@ -421,7 +433,8 @@ fn print_everything(plan: &Plan, exts: &ExtensionLookupTable) {
                 print_rel(&rel, exts, 0);
             },
             plan_rel::RelType::Root(root) => {
-                println!("Root; names({:?})", root.names);
+                println!("Root");
+                println!("field names: {:?}", root.names);
                 print_rel(&root.input.as_ref().unwrap(), exts, 1);
             }
         }
