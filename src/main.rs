@@ -38,7 +38,7 @@ fn print_named_struct(ns: &proto::NamedStruct, indent: usize, prefix: &str) {
     let s = ns.r#struct.as_ref().unwrap();
     for i in 0..l {
         let t = s.types[i].kind.as_ref();
-        print!("{} {},", type_to_str(t.unwrap()), ns.names[i]);
+        print!("{} {}, ", type_to_str(t.unwrap()), ns.names[i]);
     }
     println!(")");
 }

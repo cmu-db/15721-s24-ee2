@@ -8,10 +8,17 @@ First install duckdb via pip . The substrait extension is only available in pyth
 pip install duckdb==0.9.2
 ```
 
-## Example
-An example of how to generate plans is shown in query_generation.py
+## Batch convert sql to proto
+```shell
+make
+```
+This command converts all sql files to proto files.
 
-## Output
-There are two ways to generate the plan. 
-1. In a json file.
-2. In a blob of bytes. 
+## Investigate proto
+```shell
+cargo run -- proto_file.proto
+```
+
+## Writing a new sql test case
+See example sql files.
+Write several SQL commands, newline, `--PARSE`, newline, and then write SQL command that you want to generate substrait plan graph of.
