@@ -1,6 +1,9 @@
+use core::panic;
 use std::fs;
 use std::env;
 use std::process::exit;
+use std::collections::HashMap;
+use std::thread::current;
 use prost::Message;
 use substrait::proto;
 use substrait::proto::expression::field_reference::ReferenceType;
@@ -470,6 +473,147 @@ fn parse_extensions(exts: &Vec<SimpleExtensionDeclaration>) -> ExtensionLookupTa
     }
 }
 
+struct Pipeline {
+    operators: Vec<String>
+}
+
+fn parse_substrait_into_pipelines(plan: &Plan, exts: &ExtensionLookupTable) -> Vec<Pipeline> {
+    let mut pipelines: Vec<Pipeline> = Vec::new();
+
+    let mut stack: Vec<&Rel> = Vec::new();
+    
+    for plan_rel in &plan.relations {
+        match plan_rel.rel_type.as_ref().unwrap() {
+            plan_rel::RelType::Root(root) => {
+                stack.push(&root.input.as_ref().unwrap());
+            }
+            plan_rel::RelType::Rel(rel) => {
+                stack.push(rel);
+            }
+        }
+    }
+
+    let current_pipeline: &mut Vec<String> = &mut Vec::new();
+
+    while !stack.is_empty() {
+        let rel = stack.pop().unwrap();
+        match rel.rel_type.as_ref().unwrap() {
+            // Zero-input: wrap current pipeline
+            RelType::Read(_) => {
+                current_pipeline.push(String::from("Read"));
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{operators: wrapped_pipeline});
+            }
+            RelType::ExtensionLeaf(_) => {
+                current_pipeline.push(String::from("ExtensionLeaf"));
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{operators: wrapped_pipeline});
+            }
+            RelType::Reference(_) => {
+                current_pipeline.push(String::from("Reference"));
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{operators: wrapped_pipeline});
+            }
+            RelType::Ddl(_) => {
+                current_pipeline.push(String::from("Ddl"));
+                let wrapped_pipeline = std::mem::take(current_pipeline);
+                pipelines.push(Pipeline{operators: wrapped_pipeline});
+            }
+            // One-input: push child and continue
+            RelType::Filter(r) => {
+                current_pipeline.push(String::from("Filter"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Fetch(r) => {
+                current_pipeline.push(String::from("Fetch"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Aggregate(r) => {
+                current_pipeline.push(String::from("Aggregate"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Sort(r) => {
+                current_pipeline.push(String::from("Sort"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Project(r) => {
+                current_pipeline.push(String::from("Project"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::ExtensionSingle(r) => {
+                current_pipeline.push(String::from("ExtensionSingle"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Write(r) => {
+                current_pipeline.push(String::from("Write"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Window(r) => {
+                current_pipeline.push(String::from("Window"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Exchange(r) => {
+                current_pipeline.push(String::from("Exchange"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            RelType::Expand(r) => {
+                current_pipeline.push(String::from("Expand"));
+                stack.push(r.input.as_ref().unwrap());
+            }
+            // Multiple-inputs: push children in order
+            RelType::Join(r) => {
+                current_pipeline.push(String::from("Join"));
+                stack.push(r.left.as_ref().unwrap());
+                stack.push(r.right.as_ref().unwrap());
+            }
+            RelType::Cross(r) => {
+                current_pipeline.push(String::from("Cross"));
+                stack.push(r.left.as_ref().unwrap());
+                stack.push(r.right.as_ref().unwrap());
+            }
+            RelType::HashJoin(r) => {
+                current_pipeline.push(String::from("HashJoin"));
+                stack.push(r.left.as_ref().unwrap());
+                stack.push(r.right.as_ref().unwrap());
+            }
+            RelType::MergeJoin(r) => {
+                current_pipeline.push(String::from("MergeJoin"));
+                stack.push(r.left.as_ref().unwrap());
+                stack.push(r.right.as_ref().unwrap());
+            }
+            RelType::NestedLoopJoin(r) => {
+                current_pipeline.push(String::from("NestedLoopJoin"));
+                stack.push(r.left.as_ref().unwrap());
+                stack.push(r.right.as_ref().unwrap());
+            }
+            RelType::Set(r) => {
+                current_pipeline.push(String::from("Set"));
+                for input in &r.inputs {
+                    stack.push(input);
+                }
+            }
+            RelType::ExtensionMulti(r) => {
+                current_pipeline.push(String::from("ExtensionMulti"));
+                for input in &r.inputs {
+                    stack.push(input);
+                }
+            }
+        }
+    }
+
+    pipelines
+}
+
+fn print_pipelines(pipelines: &Vec<Pipeline>) {
+    println!("== Pipelines ==");
+    for pipeline in pipelines {
+        for op in &pipeline.operators {
+            print!("{} ", op);
+        }
+        println!("");
+    }
+}
+
 fn main() {
     let filename = env::args().nth(1);
     if filename.is_none() {
@@ -479,10 +623,14 @@ fn main() {
     let filename = filename.unwrap();
 
     let code = fs::read(filename).unwrap();
-    let plan = Plan::decode(code.as_slice()).unwrap();
-    //println!("{:?}\n", plan);
+    let plan = match Plan::decode(code.as_slice()) {
+        Ok(file) => file,
+        Err(error) => panic!("Error opening file: {:?}", error)
+    };
 
     let exts = parse_extensions(&plan.extensions);
     print_everything(&plan, &exts);
 
+    let pipelines = parse_substrait_into_pipelines(&plan, &exts);
+    print_pipelines(&pipelines);
 }

@@ -1,0 +1,14 @@
+CREATE TABLE tA (a INT, b INT);
+CREATE TABLE tB (b INT, c INT);
+CREATE TABLE tC (c INT, d INT);
+CREATE TABLE tD (d INT, e INT);
+CREATE TABLE tE (e INT, f INT);
+CREATE TABLE tF (f INT, g INT);
+INSERT INTO tA VALUES (1, 2), (2, 3), (3, 4);
+INSERT INTO tB VALUES (1, 2), (2, 3), (3, 4);
+INSERT INTO tC VALUES (1, 2), (2, 3), (3, 4);
+INSERT INTO tD VALUES (1, 2), (2, 3), (3, 4);
+INSERT INTO tE VALUES (1, 2), (2, 3), (3, 4);
+INSERT INTO tF VALUES (1, 2), (2, 3), (3, 4);
+--PARSE
+SELECT * FROM (SELECT * FROM (SELECT * FROM tA JOIN tB ON tA.b = tB.b) j1 JOIN (SELECT * FROM tC JOIN tD ON tC.d = tD.d) j2 ON j1.c = j2.c) j3 JOIN (SELECT * FROM tE JOIN tF ON tE.f = tF.f) j4 ON j3.e = j4.e;
