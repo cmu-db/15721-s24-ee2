@@ -14,10 +14,12 @@ query = "SELECT * FROM cmu_students"
 
 # blob generation
 proto_bytes = con.get_substrait(query=query).fetchone()[0]
+with open("query.proto", "wb") as proto_output:
+    proto_output.write(proto_bytes)
 
 # json generation
-json = con.get_substrait_json(query).fetchone()[0]
-print(json)
+#json = con.get_substrait_json(query).fetchone()[0]
+#print(json)
 
-with open("query.json", "w") as query_output:
-    query_output.write(json)
+#with open("query.json", "w") as query_output:
+#    query_output.write(json)
