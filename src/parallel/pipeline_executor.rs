@@ -1,14 +1,42 @@
 use std::ptr;
 use crate::common::enums::operator_result_type::{OperatorResultType, SinkResultType, SourceResultType};
-use crate::common::types::data_chunk::DataChunk;
+use crate::common::types::data_chunk::{DataChunk, CHUNK_SIZE};
 use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{PhysicalOperator, Source};
 use crate::physical_operator_states::{LocalSinkState, LocalSourceState, OperatorSinkInput, OperatorState};
+use std::ops::{Index, IndexMut};
+
 
 pub enum PipelineExecuteResult{
     Finished,
     NotFinished,
     Interrupted
+}
+
+enum ChunkPosition{
+    FinalChunk,
+    Index(u64),
+}
+
+impl IndexMut<ChunkPosition> for PipelineExecutor {
+    fn index_mut(&mut self, index: ChunkPosition) -> &mut Self::Output {
+        // println!("Accessing {index:?}-side of balance mutably");
+        match index {
+            ChunkPosition::FinalChunk => &mut self.final_chunk,
+            ChunkPosition::Index(i) => &mut self.pipeline.operators.get(i).as_ref().unwrap(),
+        }
+    }
+}
+
+impl Index<ChunkPosition> for PipelineExecutor {
+    type Output = DataChunk;
+    fn index(&self, index: ChunkPosition) -> &Self::Output {
+        // println!("Accessing {index:?}-side of balance mutably");
+        match index {
+            ChunkPosition::FinalChunk => &self.final_chunk,
+            ChunkPosition::Index(i) => &self.pipeline.operators.get(i).as_ref().unwrap(),
+        }
+    }
 }
 
 pub struct PipelineExecutor<'a>{
@@ -73,22 +101,21 @@ impl PipelineExecutor<'_>{
 
         for i in 0..pipeline.operators.len(){
 
-            // let current_operator = &pipeline.operators.get(i);
-            // let prev_operator = match i {
-            //     0 => {&pipeline_executor.pipeline.source_operator}
-            //     _ => {&pipeline_executor.pipeline.operators.get(i-1)}
-            // };
-
-
-            let chunk = Box::new(DataChunk::new());
-            // match i { 0 => { chunk.initialize(&pipeline_executor.pipeline.source_operator.get_types());}
-            //     _ => {chunk.initialize(&pipeline_executor.pipeline.operators.get(i-1).get_types());}
-            // }
+            let mut chunk = Box::new(DataChunk::new());
+            match i { 0 => { chunk.initialize(&pipeline_executor.pipeline.source_operator.as_ref().unwrap().get_types(), CHUNK_SIZE);}
+                _ => {chunk.initialize(&pipeline_executor.pipeline.operators.get(i-1).as_ref().unwrap().get_types(), CHUNK_SIZE);}
+            }
             pipeline_executor.intermediate_chunks.push(chunk);
+
+            let current_op = pipeline_executor.pipeline.operators.get(i).unwrap();
+            let op_state = current_op.get_operator_state();
+            pipeline_executor.intermediate_states.push(op_state);
+
+            //TODO
         }
 
-        //Initialize final chunk
-        //InitializeChunk(final_chunk)
+        //TODO
+        // pipeline_executor.initialize_chunk(&mut pipeline_executor.final_chunk);
 
         pipeline_executor
 
@@ -96,53 +123,53 @@ impl PipelineExecutor<'_>{
     //Execute a pipeline
     //this makes calls to execute_push_internal or fetch_from_source
     pub fn execute(&mut self, max_chunks : usize ) -> PipelineExecuteResult{
-        todo!()
-        //
-        // assert!(self.pipeline.sink_operator.is_some());
-        //
-        // let source_chunk = match self.pipeline.operators.is_empty() {
-        //     true => {&self.final_chunk}
-        //     false => {&self.intermediate_chunks.get(0).unwrap()}
+
+        assert!(self.pipeline.sink_operator.is_some());
+
+        // let mut source_chunk = match self.pipeline.operators.is_empty() {
+        //     true => {&mut self.final_chunk}
+        //     false => {&mut self.intermediate_chunks.get(0).unwrap()}
         // };
-        //
-        // for i in 0..max_chunks{
-        //
-        //     let result : OperatorResultType;
-        //
-        //     if self.exhausted_source {
-        //         //TODO
-        //     } else if self.remaining_sink_chunk{
-        //         //TODO
-        //     } else if !self.exhausted_source || self.next_batch_blocked {
-        //         let mut source_result : SourceResultType;
-        //
-        //         if !self.next_batch_blocked{
-        //
-        //             source_chunk.reset();
-        //
-        //             source_result = self.fetch_from_source(&source_chunk);
-        //
-        //             if let SourceResultType::Blocked = source_result {
-        //                 return PipelineExecuteResult::Interrupted;
-        //             }
-        //
-        //             if let SourceResultType::Finished = source_result{
-        //                 self.exhausted_source = true;
-        //             }
-        //         }
-        //
-        //
-        //         if self.exhausted_source && source_chunk.size() == 0{
-        //
-        //             continue;
-        //         }
-        //
-        //         result = self.execute_push_internal(&source_chunk, 0);
-        //
-        //     }
-        // }
-        //
+
+        for i in 0..max_chunks{
+
+            let result : OperatorResultType;
+
+            if self.exhausted_source {
+                //TODO
+            } else if self.remaining_sink_chunk{
+                // result = self.execute_push_internal(&self.final_chunk, 0);
+                self.remaining_sink_chunk = false;
+            } else if !self.exhausted_source || self.next_batch_blocked {
+                let mut source_result : SourceResultType;
+
+                // if !self.next_batch_blocked{
+                //
+                //     source_chunk.reset();
+                //
+                //     source_result = self.fetch_from_source(&source_chunk);
+                //
+                //     if let SourceResultType::Blocked = source_result {
+                //         return PipelineExecuteResult::Interrupted;
+                //     }
+                //
+                //     if let SourceResultType::Finished = source_result{
+                //         self.exhausted_source = true;
+                //     }
+                // }
+
+
+                // if self.exhausted_source && source_chunk.size() == 0{
+                //     continue;
+                // }
+                //
+                // result = self.execute_push_internal(&source_chunk, 0);
+
+            }
+        }
+
         // PipelineExecuteResult::Finished
+        todo!()
     }
 
     //this will call execute2 and/or sink
@@ -232,6 +259,13 @@ impl PipelineExecutor<'_>{
         todo!()
     }
 
+    fn initialize_chunk(&mut self, chunk: &mut DataChunk) {
+        match self.pipeline.operators.is_empty() {
+            true => {chunk.initialize(&self.pipeline.source_operator.as_ref().unwrap().get_types(), CHUNK_SIZE);}
+            false => {chunk.initialize(&self.pipeline.operators.last().unwrap().get_types(),CHUNK_SIZE);}
+        }
+    }
 
 
 }
+
