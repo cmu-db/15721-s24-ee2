@@ -22,9 +22,9 @@ pub trait Sink: PhysicalOperator {
     // Sink method is called constantly with new input, as long as new input is available
     fn sink(
         &self,
-        context: &ExecutionContext,
-        chunk: &DataChunk,
-        input: &OperatorSinkInput,
+        // context: &ExecutionContext,
+        chunk: &mut DataChunk,
+        // input: &OperatorSinkInput,
     ) -> SinkResultType;
 
     fn get_local_sink_state(&self) -> Box<LocalSinkState>;
@@ -45,8 +45,8 @@ pub trait Source: PhysicalOperator {
     fn get_data(
         &self,
         // context: &ExecutionContext,
-        chunk: &DataChunk,
-        input: &OperatorSourceInput,
+        chunk: &mut DataChunk,
+        // input: &OperatorSourceInput,
     ) -> SourceResultType;
 
     //TODO there are more stuff here

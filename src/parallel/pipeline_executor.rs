@@ -7,7 +7,7 @@ use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{PhysicalOperator, Source};
 use crate::physical_operator_states::{LocalSinkState, LocalSourceState, OperatorSinkInput, OperatorSourceInput, OperatorState};
 use std::ops::{Index, IndexMut};
-use std::ptr;
+use std::{i32, ptr};
 
 pub enum PipelineExecuteResult {
     Finished,
@@ -54,7 +54,7 @@ pub struct PipelineExecutor<'a> {
 
     local_sink_state: Option<Box<LocalSinkState>>,
 
-    final_chunk: DataChunk,
+    pub final_chunk: DataChunk,
 
     finished_processing_idx: i32,
 
@@ -126,7 +126,7 @@ impl PipelineExecutor<'_> {
             .intermediate_chunks
             .reserve(pipeline_executor.pipeline.operators.len());
 
-        for i in 0..pipeline.operators.len() {
+        for i in 0..pipeline_executor.pipeline.operators.len() {
             let mut chunk = Box::new(DataChunk::new());
             match i {
                 0 => {
@@ -250,65 +250,65 @@ impl PipelineExecutor<'_> {
         position: ChunkPosition,
         initial_idx: u64,
     ) -> OperatorResultType {
-        todo!()
 
         // //assert that a sink operator exists in this pipeline
-        // assert!(self.pipeline.sink_operator.is_some());
-        //
-        //
-        // // if the input is empty then we need more input
-        // if input.size() == 0 {
-        //     return OperatorResultType::NeedMoreInput;
-        // }
-        //
-        //
-        // // this loop will continuously push the input chunk through the pipeline as long as:
-        // // - the OperatorResultType for the Execute is HAVE_MORE_OUTPUT
-        // // - the Sink doesn't block
-        //
-        // loop {
-        //     let mut result : OperatorResultType;
-        //
-        //     //input is the final_chunk no executing is needed , the chunk just needs to be sinked
-        //     if !ptr::eq(input ,&self.final_chunk){
-        //         self.final_chunk.reset();
-        //         result = self.execute2(&input, &self.final_chunk, initial_idx);
-        //         if let OperatorResultType::Finished = result {
-        //             return OperatorResultType::Finished;
-        //         }
-        //     }
-        //
-        //     else{
-        //         result = OperatorResultType::NeedMoreInput;
-        //     }
-        //
-        //     let sink_chunk = &mut self.final_chunk;
-        //
-        //     if sink_chunk.size() > 0 {
-        //         assert!(self.pipeline.sink_operator.is_some());
-        //         //mabye we need to cast here
-        //         //or create a function that return the state
-        //         // assert!(self.pipeline.sink_operator.sink_state.is_some())
-        //
-        //
-        //         //maybe create a function to get a reference to the state
-        //         // let sink_input = OperatorSinkInput{ global_state : &self.pipeline.sink_operator.unwrap().get_sink_state(), local_state: &self.local_sink_state };
-        //
-        //         // let sink_result = self.sink(&sink_chunk, &sink_input);
-        //
-        //         // if let SinkResultType::Blocked = sink_result {
-        //         //     return OperatorResultType::Blocked;
-        //         // }
-        //         // else if let SinkResultType::Finished = sink_result {
-        //         //     self.finish_processing();
-        //         //     return OperatorResultType::Finished;
-        //         // }
-        //     }
-        //
-        //     if let OperatorResultType::NeedMoreInput = result {
-        //         return OperatorResultType::NeedMoreInput;
-        //     }
-        // }
+        assert!(self.pipeline.sink_operator.is_some());
+
+        // if the input is empty then we need more input
+        if self[position].size() == 0 {
+            return OperatorResultType::NeedMoreInput;
+        }
+
+        // this loop will continuously push the input chunk through the pipeline as long as:
+        // - the OperatorResultType for the Execute is HAVE_MORE_OUTPUT
+        // - the Sink doesn't block
+
+        loop {
+            let mut result : OperatorResultType;
+
+            //input is the final_chunk no executing is needed , the chunk just needs to be sinked
+            if !ptr::eq(&self[position] ,&self.final_chunk){
+                self.final_chunk.reset();
+                result = self.execute2(&self[position], &self.final_chunk, initial_idx);
+                if let OperatorResultType::Finished = result {
+                    return OperatorResultType::Finished;
+                }
+            }
+
+            else{
+                result = OperatorResultType::NeedMoreInput;
+            }
+
+
+
+
+            let sink_chunk = &mut self.final_chunk;
+
+            if sink_chunk.size() > 0 {
+                //mabye we need to cast here
+                //or create a function that return the state
+                // assert!(self.pipeline.sink_operator.sink_state.is_some())
+
+
+                //maybe create a function to get a reference to the state
+                // let sink_input = OperatorSinkInput{ global_state : &self.pipeline.sink_operator.unwrap().get_sink_state(), local_state: &self.local_sink_state };
+
+                let sink_result = self.sink(ChunkPosition::FinalChunk);
+
+                if let SinkResultType::Blocked = sink_result {
+                    return OperatorResultType::Blocked;
+                }
+                else if let SinkResultType::Finished = sink_result {
+                    self.finish_processing(-1);
+                    return OperatorResultType::Finished;
+                }
+            }
+
+            if let OperatorResultType::NeedMoreInput = result {
+                return OperatorResultType::NeedMoreInput;
+            }
+
+        }
     }
 
     fn execute2(
@@ -320,28 +320,42 @@ impl PipelineExecutor<'_> {
         todo!()
     }
 
-    fn finish_processing(&mut self) {
-        todo!()
+    fn finish_processing(&mut self, operator_idx :i64) {
+        self.finished_processing_idx = if operator_idx < 0 {
+            i32::MAX
+        } else{
+            operator_idx as i32
+        };
+
+        self.in_process_operators = vec![];
     }
 
-    fn sink(&self, chunk: &DataChunk, input: &OperatorSinkInput) -> SinkResultType {
-        todo!()
+    fn sink(&mut self,
+            // chunk: &mut DataChunk,
+            chunk_position: ChunkPosition
+            // input: &OperatorSinkInput
+    ) -> SinkResultType {
+
+        self.pipeline.sink_operator.as_ref().unwrap().sink(&mut self[chunk_position])
     }
 
     //calls  get data from this class that calls the get_data from operator
     fn fetch_from_source(&mut self, position: ChunkPosition) -> SourceResultType {
-        let mut source_input = OperatorSourceInput{
-            global_state : self.pipeline.source_state.as_ref().unwrap().as_ref(),
-            local_state : self.local_source_state.as_ref().unwrap().as_ref(),
-        };
+        // let mut source_input = OperatorSourceInput{
+        //     global_state : self.pipeline.source_state.as_ref().unwrap().as_ref(),
+        //     local_state : self.local_source_state.as_ref().unwrap().as_ref(),
+        // };
 
-        self.get_data(position, &mut source_input)
-
+        // self.get_data(position, &source_input)
+        self.get_data(position)
     }
 
     //should call get_data from source operator
-    fn get_data(&self, position: ChunkPosition, input : &mut OperatorSourceInput) -> SourceResultType {
-        self.pipeline.source_operator.as_ref().unwrap().get_data(&self[position], input)
+    // fn get_data(&mut self, position: ChunkPosition, input : &OperatorSourceInput) -> SourceResultType {
+    //     self.pipeline.source_operator.as_ref().unwrap().get_data(&mut self[position], input)
+    // }
+    fn get_data(&mut self, position: ChunkPosition) -> SourceResultType {
+        self.pipeline.source_operator.as_ref().unwrap().get_data(&mut self[position])
     }
 
     fn initialize_chunk(&mut self, position: ChunkPosition) {
@@ -356,6 +370,7 @@ impl PipelineExecutor<'_> {
     }
 
     fn push_finalize(&self) -> PipelineExecuteResult {
-        todo!()
+        //TODO do more here
+        PipelineExecuteResult::Finished
     }
 }
