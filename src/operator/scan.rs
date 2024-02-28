@@ -4,9 +4,11 @@ use crate::common::types::data_chunk::DataChunk;
 use crate::common::types::LogicalType;
 use crate::execution_context::ExecutionContext;
 use crate::physical_operator::{PhysicalOperator, Source};
-use crate::physical_operator_states::{GlobalSourceState, LocalSourceState, OperatorSourceInput, OperatorState};
+use crate::physical_operator_states::{
+    GlobalSourceState, LocalSourceState, OperatorSourceInput, OperatorState,
+};
 
-pub struct ScanOperator { }
+pub struct ScanOperator {}
 
 impl ScanOperator {
     pub fn new() -> ScanOperator {
@@ -15,15 +17,21 @@ impl ScanOperator {
 }
 
 impl Source for ScanOperator {
-    fn get_data(&self,
-                // context: &ExecutionContext,
-                chunk: &DataChunk, input: &OperatorSourceInput) -> SourceResultType {
+    fn get_data(
+        &self,
+        // context: &ExecutionContext,
+        chunk: &DataChunk,
+        input: &OperatorSourceInput,
+    ) -> SourceResultType {
         println!("ScanOperator::get_data");
         SourceResultType::Finished
     }
 
-    fn get_local_source_state(&self, global_operator_state: &GlobalSourceState) -> Box<LocalSourceState> {
-        todo!()
+    fn get_local_source_state(
+        &self,
+        global_operator_state: Option<&GlobalSourceState>,
+    ) -> Box<LocalSourceState> {
+        return Box::new(LocalSourceState{});
     }
 }
 

@@ -1,6 +1,10 @@
-pub enum TaskExecutionResult { TaskFinished, TaskNotFinished, TaskError, TaskBlocked }
+pub enum TaskExecutionResult {
+    TaskFinished,
+    TaskNotFinished,
+    TaskError,
+    TaskBlocked,
+}
 
-
-pub trait Task{
-    fn execute(&self)-> TaskExecutionResult;
+pub trait Task {
+    fn execute(&self) -> TaskExecutionResult;
 }

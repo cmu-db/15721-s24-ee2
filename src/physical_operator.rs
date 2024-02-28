@@ -5,9 +5,12 @@ use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::common::types::data_chunk::DataChunk;
 use crate::common::types::LogicalType;
 use crate::execution_context::ExecutionContext;
-use crate::physical_operator_states::{GlobalOperatorState, GlobalSinkState, GlobalSourceState, LocalSinkState, LocalSourceState, OperatorSinkInput, OperatorSourceInput, OperatorState};
+use crate::physical_operator_states::{
+    GlobalOperatorState, GlobalSinkState, GlobalSourceState, LocalSinkState, LocalSourceState,
+    OperatorSinkInput, OperatorSourceInput, OperatorState,
+};
 
-pub trait PhysicalOperator{
+pub trait PhysicalOperator {
     //TODO getTypes etc
     fn get_types(&self) -> Vec<LogicalType>;
     fn is_sink(&self) -> bool;
@@ -15,8 +18,7 @@ pub trait PhysicalOperator{
 }
 
 //Operators that implement Sink trait consume data
-pub trait Sink : PhysicalOperator {
-
+pub trait Sink: PhysicalOperator {
     // Sink method is called constantly with new input, as long as new input is available
     fn sink(
         &self,
@@ -32,11 +34,11 @@ pub trait Sink : PhysicalOperator {
 }
 
 //Operators that implement Source trait emit data
-pub trait Source : PhysicalOperator {
+pub trait Source: PhysicalOperator {
     fn get_local_source_state(
         &self,
         // context: &ExecutionContext,
-        global_operator_state: &GlobalSourceState,
+        global_operator_state: Option<&GlobalSourceState>,
     ) -> Box<LocalSourceState>;
 
     // fn get_global_source_state(context: &ClientContext) -> Box<GlobalSourceState>;
@@ -51,7 +53,7 @@ pub trait Source : PhysicalOperator {
 }
 
 //Physical operators that implement the Operator trait process data
-pub trait IntermediateOperator : PhysicalOperator{
+pub trait IntermediateOperator: PhysicalOperator {
     //takes an input chunk and outputs another chunk
     //for example in Projection Operator we appply the expression to the input chunk and produce the output chunk
     fn execute(

@@ -24,7 +24,7 @@ pub struct LocalSinkState {
 
 pub struct OperatorSourceInput<'a, 'b> {
     pub global_state: &'a GlobalSourceState,
-    pub local_state: &'b  LocalSourceState,
+    pub local_state: &'b LocalSourceState,
     // interrupt_state: &'c InterruptState,
     //TODO
 }

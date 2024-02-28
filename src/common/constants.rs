@@ -1,7 +1,7 @@
-pub enum PendingExecutionResult{
+pub enum PendingExecutionResult {
     ResultReady,
     ResultNotReady,
     ExecutionError,
     Blocked,
-    NoTasksAvailable
+    NoTasksAvailable,
 }

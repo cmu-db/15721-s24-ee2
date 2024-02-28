@@ -14,7 +14,14 @@ impl FilterOperator {
 }
 
 impl IntermediateOperator for FilterOperator {
-    fn execute(&self, context: &ExecutionContext, input: &DataChunk, chunk: &DataChunk, gstate: &GlobalOperatorState, state: &OperatorState) -> OperatorResultType {
+    fn execute(
+        &self,
+        context: &ExecutionContext,
+        input: &DataChunk,
+        chunk: &DataChunk,
+        gstate: &GlobalOperatorState,
+        state: &OperatorState,
+    ) -> OperatorResultType {
         println!("FilterOperator::get_data");
         todo!()
     }
@@ -24,7 +31,7 @@ impl IntermediateOperator for FilterOperator {
     }
 }
 
-impl PhysicalOperator for FilterOperator{
+impl PhysicalOperator for FilterOperator {
     fn get_types(&self) -> Vec<LogicalType> {
         todo!()
     }
