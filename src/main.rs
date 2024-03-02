@@ -4,7 +4,7 @@ use ee2::operator::filter::FilterOperator;
 use ee2::operator::scan::ScanOperator;
 use ee2::parallel::executor::Executor;
 use ee2::parallel::pipeline::Pipeline;
-use ee2::parallel::pipeline_executor::PipelineExecutor;
+use ee2::parallel::pipeline_executor::{PipelineExecuteResult, PipelineExecutor};
 use ee2::physical_operator::{Sink, Source};
 
 fn main() {
@@ -25,10 +25,14 @@ fn main() {
 
     let mut pipeline_executor = PipelineExecutor::new(&pipeline);
 
-    pipeline_executor.execute(100000);
+    let res = pipeline_executor.execute(100000);
 
-    // pipeline_executor.final_chunk.print();
     println!("");
+    match res {
+        PipelineExecuteResult::Finished => {println!("finished");}
+        PipelineExecuteResult::NotFinished => {println!("not finished");}
+        PipelineExecuteResult::Interrupted => {println!("interrupted");}
+    }
 
 
     println!("We made it :) ");

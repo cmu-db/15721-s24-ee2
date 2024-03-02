@@ -25,7 +25,6 @@ impl Source for ScanOperator {
         // input: &OperatorSourceInput,
     ) -> SourceResultType {
         unsafe {println!("ScanOperator::get_data {TIMES}");}
-        chunk.reset();
 
         //will "read" 5 times from the source (e.g filesystem or storage team)
         //after reading 5 chunks will return finished

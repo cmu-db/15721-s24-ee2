@@ -24,7 +24,6 @@ impl DataChunk {
     }
 
 
-
     pub fn reset(&mut self) {
         self.count = 0;
     }
