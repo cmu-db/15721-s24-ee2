@@ -12,3 +12,13 @@ one SQL query is hardcoded in main file.
 
 
 Idea is to develop the execution as a library and then this crate can be used to test the execution engine by passing the physical node to it.
+
+
+
+
+
+
+
+ Convert Node based plan to DAG
+
+ execute the dag
