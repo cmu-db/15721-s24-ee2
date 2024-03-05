@@ -26,6 +26,7 @@ use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionC
 use datafusion_proto::protobuf;
 
 mod execution;
+
 // use cmu_execution;
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -49,12 +50,22 @@ async fn main() -> Result<()> {
     let plan1: protobuf::PhysicalPlanNode =
         protobuf::PhysicalPlanNode::try_from_physical_plan(plan.clone(), &codec).expect("to proto");
     // get results from cmu execution engine
-    let results1 = execution::execute_physical_plan_cmu(plan1).await?;
-
+    // let results1 = execution::execute_physical_plan_cmu(plan1.clone()).await?;
+    let pipeline = execution::get_pipeline(plan1).await;
     // pipeline
-
+    println!("{}", pipeline.source_operator.is_some());
     //pileline.execute()
-    pretty::print_batches(&results1)?;
+    match pipeline.source_operator {
+        Some(so) => {
+            let data = so.get_data().unwrap();
+            print!("Pipeline source");
+            let results = vec![data];
+            pretty::print_batches(&results)?;
+        }
+        None => {}
+    }
+
+    // pretty::print_batches(&results1)?;
     Ok(())
 }
 

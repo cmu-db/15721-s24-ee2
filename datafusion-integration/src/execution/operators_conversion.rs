@@ -17,6 +17,8 @@ use datafusion_proto::physical_plan::from_proto::{
 };
 use datafusion_proto::protobuf::{FileScanExecConf, PhysicalExprNode};
 use std::sync::Arc;
+
+use super::pipeline::{ScanOperator, Source};
 fn str_to_byte(s: &String, descriptions: &str) -> Result<u8> {
     if s.len() != 1 {
         return Err(NotImplemented(String::from("size not one")));
@@ -29,7 +31,7 @@ pub fn scan(
     header: bool,
     delimiter: &String,
     quote: &String,
-) -> Result<Vec<RecordBatch>> {
+) -> Result<ScanOperator> {
     let ctx = SessionContext::new();
     let base_config: datafusion::datasource::physical_plan::FileScanConfig =
         parse_protobuf_file_scan_config(base_conf.as_ref().unwrap(), &ctx)?;
@@ -56,18 +58,7 @@ pub fn scan(
         quote,
         object_store,
     );
-
-    let config = Arc::new(conf);
-
-    let opener = CsvOpener::new(config, FileCompressionType::UNCOMPRESSED);
-    let stream = FileStream::new(&base_config, 0, opener, &ExecutionPlanMetricsSet::new())?;
-    let temp = Box::pin(stream) as SendableRecordBatchStream;
-    let t = task::block_in_place(|| {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(common::collect(temp))
-    });
-    t
+    Ok(ScanOperator::new(conf, base_config))
 }
 
 pub fn filter(input: RecordBatch, expr: &PhysicalExprNode) -> Result<RecordBatch> {
