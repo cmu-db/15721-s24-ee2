@@ -1,20 +1,20 @@
 use crate::common::enums::operator_result_type::SinkResultType;
-use crate::common::types::data_chunk::DataChunk;
 use crate::common::types::LogicalType;
-use crate::execution_context::ExecutionContext;
 use crate::physical_operator::{PhysicalOperator, Sink};
-use crate::physical_operator_states::{LocalSinkState, OperatorSinkInput};
+use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::Schema;
+use std::sync::Arc;
 
 pub struct DummySinkOperator;
 
 impl DummySinkOperator {
-    pub fn new() -> Self{
-        DummySinkOperator{}
+    pub fn new() -> Self {
+        DummySinkOperator {}
     }
 }
 
 impl PhysicalOperator for DummySinkOperator {
-    fn get_types(&self) -> Vec<LogicalType> {
+    fn schema(&self) -> Arc<Schema> {
         todo!()
     }
 
@@ -23,15 +23,9 @@ impl PhysicalOperator for DummySinkOperator {
     }
 }
 
-impl Sink for DummySinkOperator{
-    fn sink(&self, chunk: &mut DataChunk) -> SinkResultType {
+impl Sink for DummySinkOperator {
+    fn sink(&self, chunk: &mut RecordBatch) -> SinkResultType {
         println!("Sinking");
-        chunk.print();
-        println!("");
         SinkResultType::NeedMoreInput
-    }
-
-    fn get_local_sink_state(&self) -> Box<LocalSinkState> {
-        Box::new(LocalSinkState{})
     }
 }

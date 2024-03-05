@@ -1,9 +1,9 @@
 use crate::common::enums::operator_result_type::OperatorResultType;
-use crate::common::types::data_chunk::DataChunk;
 use crate::common::types::LogicalType;
-use crate::execution_context::ExecutionContext;
 use crate::physical_operator::{IntermediateOperator, PhysicalOperator};
-use crate::physical_operator_states::{GlobalOperatorState, OperatorState};
+use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::Schema;
+use std::sync::Arc;
 
 pub struct FilterOperator {}
 
@@ -14,25 +14,14 @@ impl FilterOperator {
 }
 
 impl IntermediateOperator for FilterOperator {
-    fn execute(
-        &self,
-        context: &ExecutionContext,
-        input: &DataChunk,
-        chunk: &DataChunk,
-        gstate: &GlobalOperatorState,
-        state: &OperatorState,
-    ) -> OperatorResultType {
+    fn execute(&self, input: &RecordBatch, chunk: &RecordBatch) -> OperatorResultType {
         println!("FilterOperator::get_data");
-        todo!()
-    }
-
-    fn get_operator_state(&self) -> Box<OperatorState> {
         todo!()
     }
 }
 
 impl PhysicalOperator for FilterOperator {
-    fn get_types(&self) -> Vec<LogicalType> {
+    fn schema(&self) -> Arc<Schema> {
         todo!()
     }
 
