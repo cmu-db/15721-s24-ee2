@@ -11,18 +11,18 @@ pub trait PhysicalOperator {
     //TODO getTypes etc
     fn schema(&self) -> Arc<Schema>;
     fn is_sink(&self) -> bool;
-    // fn is_source(&self) -> bool;
+    fn is_source(&self) -> bool;
 }
 
 //Operators that implement Sink trait consume data
 pub trait Sink: PhysicalOperator {
     // Sink method is called constantly with new input, as long as new input is available
-    fn sink(&self, chunk: &mut RecordBatch) -> SinkResultType;
+    fn sink(&self, chunk: &RecordBatch) -> SinkResultType;
 }
 
 //Operators that implement Source trait emit data
 pub trait Source: PhysicalOperator {
-    fn get_data(&self, chunk: &mut RecordBatch) -> SourceResultType;
+    fn get_data(&mut self, chunk: &mut RecordBatch) -> SourceResultType;
 }
 
 //Physical operators that implement the Operator trait process data

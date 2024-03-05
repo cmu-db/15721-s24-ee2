@@ -18,14 +18,19 @@ impl PhysicalOperator for DummySinkOperator {
         todo!()
     }
 
+    fn is_source(&self) -> bool {
+        false
+    }
+
     fn is_sink(&self) -> bool {
         true
     }
 }
 
 impl Sink for DummySinkOperator {
-    fn sink(&self, chunk: &mut RecordBatch) -> SinkResultType {
+    fn sink(&self, chunk: &RecordBatch) -> SinkResultType {
         println!("Sinking");
-        SinkResultType::NeedMoreInput
+        println!("{:?}", chunk);
+        SinkResultType::Finished
     }
 }
