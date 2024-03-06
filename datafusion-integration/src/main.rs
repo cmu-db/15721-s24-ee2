@@ -15,11 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::record_batch::RecordBatch;
 use arrow::util::pretty;
 use datafusion::error::Result;
 use datafusion::execution::context::SessionState;
-use datafusion::physical_plan::displayable;
 
 use datafusion::{dataframe, prelude::*};
 use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};

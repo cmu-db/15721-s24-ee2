@@ -1,22 +1,9 @@
-use datafusion::arrow::array::RecordBatch;
-use datafusion::error::DataFusionError::NotImplemented;
-use datafusion::error::Result;
-use datafusion::physical_plan::collect;
-
-use datafusion::execution::context::SessionContext;
-use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::protobuf::physical_plan_node::PhysicalPlanType;
 use datafusion_proto::protobuf::PhysicalPlanNode;
-mod operators;
 mod operators_conversion;
-use datafusion::datasource::physical_plan::FileScanConfig;
-use datafusion::datasource::physical_plan::{CsvConfig, CsvOpener};
-use std::os::unix::net::SocketAddr;
-use std::sync::Arc;
 use vayu::pipeline::Source;
 use vayu::pipeline::{self, IntermediateOperator};
 
-use vayu::operators::scan::ScanOperator;
 use vayu::pipeline::Pipeline;
 
 pub async fn get_pipeline(plan: PhysicalPlanNode) -> pipeline::Pipeline {
@@ -61,7 +48,6 @@ fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
 
             pipeline.source_operator = Some(Box::new(so) as Box<dyn Source>);
             pipeline.state.schema = Some(schema);
-            // TODO: add ScanOperator to pipeline
         }
 
         _ => {

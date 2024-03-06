@@ -21,7 +21,6 @@ use std::sync::Arc;
 use vayu::operators::filter::FilterOperator;
 
 use vayu::operators::scan::ScanOperator;
-use vayu::pipeline::Source;
 fn str_to_byte(s: &String, descriptions: &str) -> Result<u8> {
     if s.len() != 1 {
         return Err(NotImplemented(String::from("size not one")));
