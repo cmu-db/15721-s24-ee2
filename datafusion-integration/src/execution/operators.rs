@@ -24,52 +24,6 @@ fn str_to_byte(s: &String, descriptions: &str) -> Result<u8> {
     Ok(s.as_bytes()[0])
 }
 
-pub fn scan(
-    base_conf: Option<FileScanExecConf>,
-    header: bool,
-    delimiter: &String,
-    quote: &String,
-) -> Result<Vec<RecordBatch>> {
-    let ctx = SessionContext::new();
-    let base_config: datafusion::datasource::physical_plan::FileScanConfig =
-        parse_protobuf_file_scan_config(base_conf.as_ref().unwrap(), &ctx)?;
-    let schema = base_config.file_schema.clone();
-    let delimiter = str_to_byte(delimiter, "delimiter")?;
-    let quote = str_to_byte(quote, "quote")?;
-
-    let object_store = ctx
-        .runtime_env()
-        .object_store(&base_config.object_store_url)?;
-
-    let file_projection = base_config.projection.as_ref().map(|p| {
-        p.iter()
-            .filter(|col_idx| **col_idx < base_config.file_schema.fields().len())
-            .copied()
-            .collect()
-    });
-    let conf = CsvConfig::new(
-        8192,
-        schema,
-        file_projection,
-        header,
-        delimiter,
-        quote,
-        object_store,
-    );
-
-    let config = Arc::new(conf);
-
-    let opener = CsvOpener::new(config, FileCompressionType::UNCOMPRESSED);
-    let stream = FileStream::new(&base_config, 0, opener, &ExecutionPlanMetricsSet::new())?;
-    let temp = Box::pin(stream) as SendableRecordBatchStream;
-    let t = task::block_in_place(|| {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(common::collect(temp))
-    });
-    t
-}
-
 pub fn filter(input: RecordBatch, expr: &PhysicalExprNode) -> Result<RecordBatch> {
     let ctx = SessionContext::new();
     let predicate = parse_physical_expr(expr, &ctx, &input.schema()).unwrap();

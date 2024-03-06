@@ -1,3 +1,4 @@
+use arrow::datatypes::Schema;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::datasource::file_format::file_compression_type::FileCompressionType;
 use datafusion::datasource::physical_plan::FileStream;
@@ -17,8 +18,10 @@ use datafusion_proto::physical_plan::from_proto::{
 };
 use datafusion_proto::protobuf::{FileScanExecConf, PhysicalExprNode};
 use std::sync::Arc;
+use vayu::operators::filter::FilterOperator;
 
-use super::pipeline::{ScanOperator, Source};
+use vayu::operators::scan::ScanOperator;
+use vayu::pipeline::Source;
 fn str_to_byte(s: &String, descriptions: &str) -> Result<u8> {
     if s.len() != 1 {
         return Err(NotImplemented(String::from("size not one")));
@@ -36,6 +39,7 @@ pub fn scan(
     let base_config: datafusion::datasource::physical_plan::FileScanConfig =
         parse_protobuf_file_scan_config(base_conf.as_ref().unwrap(), &ctx)?;
     let schema = base_config.file_schema.clone();
+
     let delimiter = str_to_byte(delimiter, "delimiter")?;
     let quote = str_to_byte(quote, "quote")?;
 
@@ -61,22 +65,8 @@ pub fn scan(
     Ok(ScanOperator::new(conf, base_config))
 }
 
-pub fn filter(input: RecordBatch, expr: &PhysicalExprNode) -> Result<RecordBatch> {
+pub fn filter(schema: &Schema, expr: &PhysicalExprNode) -> Result<FilterOperator> {
     let ctx = SessionContext::new();
-    let predicate = parse_physical_expr(expr, &ctx, &input.schema()).unwrap();
-    println!("{}", predicate);
-    let output = filter_record_batch(
-        &input,
-        as_boolean_array(
-            &predicate
-                .evaluate(&input)
-                .unwrap()
-                .into_array(1024)
-                .unwrap(),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-
-    Ok(output)
+    let predicate = parse_physical_expr(expr, &ctx, schema).unwrap();
+    Ok(FilterOperator::new(predicate))
 }

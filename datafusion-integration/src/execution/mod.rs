@@ -9,19 +9,15 @@ use datafusion_proto::protobuf::physical_plan_node::PhysicalPlanType;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 mod operators;
 mod operators_conversion;
-mod pipeline;
 use datafusion::datasource::physical_plan::FileScanConfig;
 use datafusion::datasource::physical_plan::{CsvConfig, CsvOpener};
-use pipeline::Source;
 use std::os::unix::net::SocketAddr;
 use std::sync::Arc;
+use vayu::pipeline::Source;
+use vayu::pipeline::{self, IntermediateOperator};
 
-use self::pipeline::{Pipeline, ScanOperator};
-pub async fn execute_physical_plan_cmu(plan: PhysicalPlanNode) -> Result<Vec<RecordBatch>> {
-    let mut pipeline: pipeline::Pipeline = Pipeline::new();
-    // println!("{:?}", plan.physical_plan_type);
-    print_tree(plan)
-}
+use vayu::operators::scan::ScanOperator;
+use vayu::pipeline::Pipeline;
 
 pub async fn get_pipeline(plan: PhysicalPlanNode) -> pipeline::Pipeline {
     let mut pipeline: pipeline::Pipeline = Pipeline::new();
@@ -29,48 +25,21 @@ pub async fn get_pipeline(plan: PhysicalPlanNode) -> pipeline::Pipeline {
     pipeline
 }
 
-fn print_tree(node: PhysicalPlanNode) -> Result<Vec<RecordBatch>> {
-    match node.physical_plan_type {
-        Some(PhysicalPlanType::Filter(filter)) => {
-            println!("Filter");
-            let input = print_tree(*filter.input.unwrap()).unwrap();
-            // util::filter(filter.expr);
-            let t = input.iter();
-            let expr = &filter.expr.unwrap();
-            t.map(|x| operators::filter(x.clone(), expr)).collect()
-        }
-        Some(PhysicalPlanType::CoalesceBatches(t)) => {
-            println!("CoalesceBatches");
-            return print_tree(*t.input.unwrap());
-        }
-        Some(PhysicalPlanType::Repartition(t)) => {
-            println!("Repartition");
-            return print_tree(*t.input.unwrap());
-        }
-        Some(PhysicalPlanType::CsvScan(scan)) => {
-            let t = 10;
-
-            operators::scan(
-                scan.base_conf,
-                scan.has_header,
-                &scan.delimiter,
-                &scan.quote,
-            )
-        }
-
-        _ => {
-            println!("unknown");
-            Err(NotImplemented(String::from(
-                "node type not added to print_tree",
-            )))
-        }
-    }
-}
 fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
     match node.physical_plan_type {
         Some(PhysicalPlanType::Filter(filter)) => {
             println!("Filter");
+            let expr = &filter.expr.unwrap();
             make_pipeline(pipeline, *filter.input.unwrap());
+            let schema = match pipeline.state.schema.as_ref() {
+                Some(schema) => schema.clone(),
+                None => panic!("schema not found"),
+            };
+            let fo = operators_conversion::filter(&schema, expr).unwrap();
+            pipeline
+                .operators
+                .push(Box::new(fo) as Box<dyn IntermediateOperator>);
+            println!("len in func  {}", pipeline.operators.len());
         }
         Some(PhysicalPlanType::CoalesceBatches(t)) => {
             println!("CoalesceBatches");
@@ -88,7 +57,10 @@ fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
                 &scan.quote,
             )
             .unwrap();
-            pipeline.source_operator = Some(Box::new(so) as Box<dyn Source>)
+            let schema = so.fileconfig.file_schema.clone();
+
+            pipeline.source_operator = Some(Box::new(so) as Box<dyn Source>);
+            pipeline.state.schema = Some(schema);
             // TODO: add ScanOperator to pipeline
         }
 
@@ -96,11 +68,4 @@ fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
             println!("unknown");
         }
     }
-}
-
-pub async fn execute_physical_plan(
-    plan: Arc<dyn ExecutionPlan>,
-    ctx: SessionContext,
-) -> Result<Vec<RecordBatch>> {
-    collect(plan, ctx.task_ctx()).await
 }

@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     )
     .await?;
     // sql query
-    let sql = "SELECT c1,c12  FROM aggregate_test_100  ";
+    let sql = "SELECT c1,c12  FROM aggregate_test_100 WHERE c12 < 0.3 ";
     // create datafusion logical plan
     let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
     // create datafusion physical plan (trait)
@@ -49,23 +49,12 @@ async fn main() -> Result<()> {
     let codec: DefaultPhysicalExtensionCodec = DefaultPhysicalExtensionCodec {};
     let plan1: protobuf::PhysicalPlanNode =
         protobuf::PhysicalPlanNode::try_from_physical_plan(plan.clone(), &codec).expect("to proto");
-    // get results from cmu execution engine
-    // let results1 = execution::execute_physical_plan_cmu(plan1.clone()).await?;
+    // get pipeline
     let pipeline = execution::get_pipeline(plan1).await;
-    // pipeline
-    println!("{}", pipeline.source_operator.is_some());
-    //pileline.execute()
-    match pipeline.source_operator {
-        Some(so) => {
-            let data = so.get_data().unwrap();
-            print!("Pipeline source");
-            let results = vec![data];
-            pretty::print_batches(&results)?;
-        }
-        None => {}
-    }
+    // execute the pipeline
+    let results = vayu::execute(pipeline).unwrap();
 
-    // pretty::print_batches(&results1)?;
+    pretty::print_batches(&results)?;
     Ok(())
 }
 
