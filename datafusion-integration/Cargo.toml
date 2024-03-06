@@ -1,6 +1,5 @@
-workspace = { members = ["datafusion-integration", "vayu"] }
 [package]
-name = "ee2"
+name = "datafusion_integration"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,3 +10,4 @@ arrow = { version = "50.0.0"}
 datafusion = { version = "35.0.0"}
 datafusion-proto = { version = "35.0.0"}
 tokio = { version = "1.4.0", features = ["rt", "rt-multi-thread", "macros"] }
+vayu = { path = "../vayu", version = "0.1.0"}
