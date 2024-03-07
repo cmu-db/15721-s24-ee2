@@ -1,11 +1,12 @@
+use datafusion::logical_expr::builder::project;
 use datafusion_proto::protobuf::physical_plan_node::PhysicalPlanType;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 mod operators_conversion;
 use vayu::pipeline::Source;
 use vayu::pipeline::{self, IntermediateOperator};
 
+use std::sync::Arc;
 use vayu::pipeline::Pipeline;
-
 pub async fn get_pipeline(plan: PhysicalPlanNode) -> pipeline::Pipeline {
     let mut pipeline: pipeline::Pipeline = Pipeline::new();
     make_pipeline(&mut pipeline, plan.clone());
@@ -36,6 +37,15 @@ fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
             println!("Repartition");
             make_pipeline(pipeline, *t.input.unwrap());
         }
+        Some(PhysicalPlanType::Projection(t)) => {
+            println!("Projection");
+            let schema = match pipeline.state.schema.as_ref() {
+                Some(schema) => schema.clone(),
+                None => panic!("schema not found"),
+            };
+            make_pipeline(pipeline, *t.input.unwrap());
+            let po = operators_conversion::projection(&schema, projection);
+        }
         Some(PhysicalPlanType::CsvScan(scan)) => {
             let so = operators_conversion::scan(
                 scan.base_conf,
@@ -44,14 +54,14 @@ fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
                 &scan.quote,
             )
             .unwrap();
-            let schema = so.fileconfig.file_schema.clone();
+            let schema = so.schema.clone();
 
             pipeline.source_operator = Some(Box::new(so) as Box<dyn Source>);
             pipeline.state.schema = Some(schema);
         }
 
         _ => {
-            println!("unknown");
+            panic!("unknown physical operator");
         }
     }
 }

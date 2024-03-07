@@ -16,10 +16,12 @@
 // under the License.
 
 use arrow::util::pretty;
+use datafusion::physical_plan::displayable;
+
 use datafusion::error::Result;
 use datafusion::execution::context::SessionState;
 
-use datafusion::{dataframe, prelude::*};
+use datafusion::prelude::*;
 use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::protobuf;
 
@@ -38,11 +40,15 @@ async fn main() -> Result<()> {
     )
     .await?;
     // sql query
-    let sql = "SELECT c1,c12  FROM aggregate_test_100 WHERE c12 < 0.3 ";
+    let sql = "SELECT SUM(c12)  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
     // create datafusion logical plan
     let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
     // create datafusion physical plan (trait)
     let plan = SessionState::create_physical_plan(&ctx.state(), &logical_plan).await?;
+    println!(
+        "Detailed physical plan:\n{}",
+        displayable(plan.as_ref()).indent(true)
+    );
     // convert to node based datafusion physical plan
     let codec: DefaultPhysicalExtensionCodec = DefaultPhysicalExtensionCodec {};
     let plan1: protobuf::PhysicalPlanNode =

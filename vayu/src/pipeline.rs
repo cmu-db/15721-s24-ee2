@@ -36,7 +36,7 @@ pub trait Sink: PhysicalOperator {
 
 //Operators that implement Source trait emit data
 pub trait Source: PhysicalOperator {
-    fn get_data(&self) -> Result<RecordBatch>;
+    fn get_data(&mut self) -> Option<RecordBatch>;
 }
 
 //Physical operators that implement the Operator trait process data
