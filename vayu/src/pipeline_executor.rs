@@ -28,10 +28,17 @@ impl PipelineExecutor {
         println!("source is present");
         loop {
             let data = futures::executor::block_on(source.next());
-            match data {
-                Some(block) => results.push(block.unwrap()),
-                None => break,
+            if data.is_none() {
+                break;
             }
+            let mut data = data.unwrap().unwrap();
+            let ref_pipeline = &*self.pipeline.operators;
+
+            for x in ref_pipeline {
+                println!("running operator {}", x.name());
+                data = x.execute(&data).unwrap();
+            }
+            results.push(data);
         }
         Ok(results)
     }

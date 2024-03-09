@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 arrow = { version = "50.0.0"}
-datafusion = { version = "35.0.0"}
-datafusion-proto = { version = "35.0.0"}
+datafusion = { version = "35.0.0",path = "../../arrow-datafusion/datafusion/core"}
+datafusion-proto = { version = "35.0.0",path = "../../arrow-datafusion/datafusion/proto"}
 tokio = { version = "1.4.0", features = ["rt", "rt-multi-thread", "macros"] }
 vayu = { path = "../vayu", version = "0.1.0"}

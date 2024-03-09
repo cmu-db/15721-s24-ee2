@@ -10,6 +10,7 @@ use datafusion::arrow::array::RecordBatch;
 use datafusion::common::cast::as_boolean_array;
 use datafusion::datasource::physical_plan::FileScanConfig;
 use datafusion::error::Result;
+use datafusion::physical_plan::filter::batch_filter;
 use datafusion::physical_plan::{
     functions, ColumnStatistics, Partitioning, PhysicalExpr, Statistics, WindowExpr,
 };
@@ -18,20 +19,17 @@ use futures::StreamExt;
 use std::sync::Arc;
 use tokio::task;
 pub struct FilterOperator {
-    exec: SendableRecordBatchStream,
-    dummy_input: DummyFeeder,
+    predicate: Arc<dyn PhysicalExpr>,
 }
 impl FilterOperator {
-    pub fn new(exec: SendableRecordBatchStream, dummy_input: DummyFeeder) -> FilterOperator {
-        FilterOperator { exec, dummy_input }
+    pub fn new(predicate: Arc<dyn PhysicalExpr>) -> FilterOperator {
+        FilterOperator { predicate }
     }
 }
 
 impl IntermediateOperator for FilterOperator {
-    fn execute(&mut self, input: &RecordBatch) -> Result<RecordBatch> {
-        self.dummy_input.batch = Some(input.clone());
-        let data = futures::executor::block_on(self.exec.next());
-        data.unwrap()
+    fn execute(&self, input: &RecordBatch) -> Result<RecordBatch> {
+        batch_filter(input, &self.predicate)
     }
 }
 

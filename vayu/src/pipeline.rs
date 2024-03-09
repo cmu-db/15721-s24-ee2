@@ -137,20 +137,10 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>) {
 
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         make_pipeline(pipeline, exec.input().clone());
-        let dummy_input = DummyFeeder { batch: None };
-        let dummy_exec = DummyExec {
-            schema: exec.schema(),
-        };
-        let p: Arc<dyn ExecutionPlan> = Arc::new(dummy_exec);
-        let predicate = exec.predicate();
-        let exec1 = FilterExec::try_new(predicate.clone(), p)
-            .unwrap()
-            .execute(0, context)
-            .unwrap();
-        let opt: Box<dyn IntermediateOperator> = Box::new(FilterOperator::new(exec1, &dummy_input));
-        pipeline.operators.push(opt);
+        let tt = Box::new(FilterOperator::new(exec.predicate().clone()));
+        pipeline.operators.push(tt);
+
         return;
-        // pipeline.operators.push(FilterOperator::new())
     }
     if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
         make_pipeline(pipeline, exec.input().clone());
@@ -182,5 +172,5 @@ pub trait Source: PhysicalOperator {
 pub trait IntermediateOperator: PhysicalOperator {
     //takes an input chunk and outputs another chunk
     //for example in Projection Operator we appply the expression to the input chunk and produce the output chunk
-    fn execute(&mut self, input: &RecordBatch) -> Result<RecordBatch>;
+    fn execute(&self, input: &RecordBatch) -> Result<RecordBatch>;
 }
