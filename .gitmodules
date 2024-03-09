@@ -1,0 +1,3 @@
+[submodule "arrow-datafusion"]
+	path = arrow-datafusion
+	url = git@github.com:yashkothari42/arrow-datafusion.git
