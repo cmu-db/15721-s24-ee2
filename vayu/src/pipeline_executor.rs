@@ -1,9 +1,13 @@
+use crate::pipeline::DummyFeeder;
 use crate::pipeline::Pipeline;
 use arrow::array::RecordBatch;
 use arrow::error::Result;
 use datafusion::physical_plan::{common, SendableRecordBatchStream};
+use futures::stream::Stream;
 use futures::StreamExt;
+use std::pin::Pin;
 use std::task::{Context, Poll};
+
 use tokio::runtime::Runtime; // 0.3.5
 pub struct PipelineExecutor {
     pipeline: Pipeline,
