@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
     )
     .await?;
     // sql query
-    let sql = "SELECT c1,c12  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
+    let sql = "SELECT c12  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
     // create datafusion logical plan
     let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
     // create datafusion physical plan (trait)

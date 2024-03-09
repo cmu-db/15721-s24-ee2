@@ -1,5 +1,6 @@
 use crate::operators::filter::FilterOperator;
 
+use crate::operators::projection::ProjectionOperator;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
 use datafusion::datasource::physical_plan::CsvExec;
@@ -8,6 +9,7 @@ use datafusion::execution::context::SessionContext;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion::physical_plan::filter::FilterExec;
+use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::repartition::RepartitionExec;
 
 use datafusion::physical_plan::ExecutionPlan;
@@ -41,16 +43,28 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>) {
     let context = ctx.task_ctx();
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         let stream = plan.execute(0, context).unwrap();
+        println!("adding source");
         pipeline.source = Some(stream);
         return;
     }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         make_pipeline(pipeline, exec.input().clone());
         let tt = Box::new(FilterOperator::new(exec.predicate().clone()));
-        pipeline.operators.push(tt);
+        println!("adding filter");
 
+        pipeline.operators.push(tt);
         return;
     }
+    if let Some(exec) = p.downcast_ref::<ProjectionExec>() {
+        make_pipeline(pipeline, exec.input().clone());
+        println!("adding projection");
+        let expr = exec.expr().iter().map(|x| x.0.clone()).collect();
+        let schema = exec.schema().clone();
+        let tt = Box::new(ProjectionOperator::new(expr, schema));
+        pipeline.operators.push(tt);
+        return;
+    }
+
     if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
         make_pipeline(pipeline, exec.input().clone());
         return;

@@ -1,3 +1,4 @@
+use crate::pipeline::IntermediateOperator;
 use crate::pipeline::Pipeline;
 use arrow::array::RecordBatch;
 use arrow::error::Result;
@@ -19,19 +20,33 @@ impl PipelineExecutor {
 
         println!("source is present");
         loop {
+            // read from source until finished.
+            // todo: each source record batch can be processed in seperate thread.
             let data = futures::executor::block_on(source.next());
-            if data.is_none() {
-                break;
+            match data {
+                Some(data) => {
+                    let output = Self::ExecutePushInternal(&self.pipeline.operators, data.unwrap());
+                    results.push(output)
+                }
+                // no data left to be processed
+                None => break,
             }
-            let mut data = data.unwrap().unwrap();
-            let ref_pipeline = &*self.pipeline.operators;
-
-            for x in ref_pipeline {
-                println!("running operator {}", x.name());
-                data = x.execute(&data).unwrap();
-            }
-            results.push(data);
         }
         Ok(results)
+    }
+    /**
+     * takes a record batch and passes it through all the operators
+     * and returns the final  record batch. synchronous code. faster.
+     * no operator can be blocked (for now).
+     */
+    fn ExecutePushInternal(
+        operators: &Vec<Box<dyn IntermediateOperator>>,
+        mut data: RecordBatch,
+    ) -> RecordBatch {
+        for x in operators {
+            println!("running operator {}", x.name());
+            data = x.execute(&data).unwrap();
+        }
+        data
     }
 }
