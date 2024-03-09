@@ -7,13 +7,13 @@ use vayu::pipeline::{self, IntermediateOperator};
 
 use std::sync::Arc;
 use vayu::pipeline::Pipeline;
-pub async fn get_pipeline(plan: PhysicalPlanNode) -> pipeline::Pipeline {
+pub async fn get_pipeline(plan: std::sync::Arc<dyn ExecutionPlan>) -> pipeline::Pipeline {
     let mut pipeline: pipeline::Pipeline = Pipeline::new();
     make_pipeline(&mut pipeline, plan.clone());
     pipeline
 }
 
-fn make_pipeline(pipeline: &mut pipeline::Pipeline, node: PhysicalPlanNode) {
+fn make_pipeline(pipeline: &mut pipeline::Pipeline, plan: std::sync::Arc<dyn ExecutionPlan>) {
     match node.physical_plan_type {
         Some(PhysicalPlanType::Filter(filter)) => {
             println!("Filter");

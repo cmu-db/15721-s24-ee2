@@ -16,16 +16,16 @@
 // under the License.
 
 use arrow::util::pretty;
-use datafusion::physical_plan::displayable;
-
 use datafusion::error::Result;
 use datafusion::execution::context::SessionState;
+use datafusion::execution::context::TaskContext;
+use datafusion::physical_plan::displayable;
 
 use datafusion::prelude::*;
 use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::protobuf;
-
-mod execution;
+use std::sync::Arc;
+// mod execution;
 
 // use cmu_execution;
 #[tokio::main]
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     )
     .await?;
     // sql query
-    let sql = "SELECT SUM(c12)  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
+    let sql = "SELECT c1,c12  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
     // create datafusion logical plan
     let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
     // create datafusion physical plan (trait)
@@ -49,15 +49,11 @@ async fn main() -> Result<()> {
         "Detailed physical plan:\n{}",
         displayable(plan.as_ref()).indent(true)
     );
-    // convert to node based datafusion physical plan
-    let codec: DefaultPhysicalExtensionCodec = DefaultPhysicalExtensionCodec {};
-    let plan1: protobuf::PhysicalPlanNode =
-        protobuf::PhysicalPlanNode::try_from_physical_plan(plan.clone(), &codec).expect("to proto");
-    // get pipeline
-    let pipeline = execution::get_pipeline(plan1).await;
-    // execute the pipeline
-    let results = vayu::execute(pipeline).unwrap();
 
+    // let stream = plan.execute(0, Arc::new(TaskContext::from(&ctx)));
+    // execute the pipeline
+    // let results = vayu::execute(stream.unwrap()).unwrap();
+    let results = vayu::execute(plan).unwrap();
     pretty::print_batches(&results)?;
     Ok(())
 }

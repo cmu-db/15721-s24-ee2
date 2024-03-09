@@ -19,11 +19,10 @@ use std::sync::Arc;
 use tokio::task;
 pub struct ScanOperator {
     stream: SendableRecordBatchStream,
-    pub schema: Arc<Schema>,
 }
 impl ScanOperator {
-    pub fn new(stream: SendableRecordBatchStream, schema: Arc<Schema>) -> ScanOperator {
-        ScanOperator { stream, schema }
+    pub fn new(stream: SendableRecordBatchStream) -> ScanOperator {
+        ScanOperator { stream }
     }
 }
 

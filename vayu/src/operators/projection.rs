@@ -25,7 +25,9 @@ impl ProjectionOperator {
 }
 
 impl IntermediateOperator for ProjectionOperator {
-    fn execute(&self, input: &RecordBatch) -> Result<RecordBatch> {}
+    fn execute(&self, input: &RecordBatch) -> Result<RecordBatch> {
+        todo!();
+    }
 }
 
 impl PhysicalOperator for ProjectionOperator {

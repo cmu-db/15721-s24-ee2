@@ -1,11 +1,21 @@
+use crate::operators::filter::FilterOperator;
+use crate::operators::scan::ScanOperator;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
+use datafusion::datasource::physical_plan::CsvExec;
 use datafusion::error::Result;
+use datafusion::execution::context::TaskContext;
+use datafusion::execution::context::{SessionContext, SessionState};
+use datafusion::execution::SendableRecordBatchStream;
+use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
+use datafusion::physical_plan::filter::FilterExec;
+use datafusion::physical_plan::repartition::RepartitionExec;
+use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
 
 pub struct Pipeline {
-    pub source_operator: Option<Box<dyn Source>>,
-    pub sink_operator: Option<Box<dyn Sink>>,
+    pub source: Option<SendableRecordBatchStream>,
+    pub sink: Option<SendableRecordBatchStream>,
     pub operators: Vec<Box<dyn IntermediateOperator>>,
     pub state: PipelineState,
 }
@@ -13,18 +23,45 @@ pub struct PipelineState {
     pub schema: Option<Arc<Schema>>,
 }
 impl Pipeline {
-    pub fn new() -> Pipeline {
-        Pipeline {
-            source_operator: None,
-            sink_operator: None,
+    pub fn new(plan: Arc<dyn ExecutionPlan>) -> Pipeline {
+        let mut pipeline = Pipeline {
+            source: None,
+            sink: None,
             operators: vec![],
             state: PipelineState { schema: None },
-        }
+        };
+        make_pipeline(&mut pipeline, plan);
+        pipeline
+    }
+}
+
+fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>) {
+    let p = plan.as_any();
+    if let Some(exec) = p.downcast_ref::<CsvExec>() {
+        let ctx = Arc::new(SessionContext::new());
+
+        let mut stream = plan.execute(0, ctx.task_ctx()).unwrap();
+        pipeline.source = Some(stream);
+        return;
+    }
+
+    if let Some(exec) = p.downcast_ref::<FilterExec>() {
+        make_pipeline(pipeline, exec.input().clone());
+        return;
+        // pipeline.operators.push(FilterOperator::new())
+    }
+    if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
+        make_pipeline(pipeline, exec.input().clone());
+        return;
+        // pipeline.operators.push(FilterOperator::new())
+    }
+    if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
+        make_pipeline(pipeline, exec.input().clone());
+        return;
+        // pipeline.operators.push(FilterOperator::new())
     }
 }
 pub trait PhysicalOperator {
-    // fn is_sink(&self) -> bool;
-    // fn is_source(&self) -> bool;
     fn name(&self) -> String;
 }
 
