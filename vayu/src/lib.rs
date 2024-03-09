@@ -1,8 +1,6 @@
-use core::panic;
 mod pipeline_executor;
 use arrow::array::RecordBatch;
 use arrow::error::Result;
-use datafusion::physical_plan::{common, SendableRecordBatchStream};
 use pipeline::Pipeline;
 use pipeline_executor::PipelineExecutor;
 pub mod operators;
