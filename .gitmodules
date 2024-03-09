@@ -1,3 +1,0 @@
-[submodule "arrow-datafusion"]
-	path = arrow-datafusion
-	url = https://github.com/apache/arrow-datafusion.git
