@@ -44,7 +44,12 @@ impl PipelineExecutor {
         mut data: RecordBatch,
     ) -> RecordBatch {
         for x in operators {
-            println!("running operator {}", x.name());
+            println!(
+                "running operator {} size {}x{}",
+                x.name(),
+                data.num_rows(),
+                data.num_columns()
+            );
             data = x.execute(&data).unwrap();
         }
         data

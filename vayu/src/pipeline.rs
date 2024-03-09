@@ -11,6 +11,7 @@ use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::repartition::RepartitionExec;
+use datafusion::prelude::SessionConfig;
 
 use datafusion::physical_plan::ExecutionPlan;
 
@@ -39,8 +40,12 @@ impl Pipeline {
 
 fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>) {
     let p = plan.as_any();
-    let ctx: Arc<SessionContext> = Arc::new(SessionContext::new());
+    let config = SessionConfig::new().with_batch_size(32);
+    let ctx = Arc::new(SessionContext::new_with_config(config));
     let context = ctx.task_ctx();
+
+    // set batch size here
+    // println!("batch size {context.se}");
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         let stream = plan.execute(0, context).unwrap();
         println!("adding source");
