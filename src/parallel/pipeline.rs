@@ -1,7 +1,7 @@
 use crate::common::enums::operator_result_type::{OperatorResultType, SourceResultType};
-use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink, Source};
+use crate::physical_operator::{IntermediateOperator, Sink, Source};
 use datafusion::arrow::array::RecordBatch;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct Pipeline {
     pub source_operator: Option<Box<dyn Source>>,
@@ -19,51 +19,49 @@ impl Pipeline {
     }
 
     pub fn execute(&mut self) -> () {
-        struct temp {
+        struct StackEntry {
             index: usize,
-            input: Rc<RecordBatch>,
+            input: Arc<RecordBatch>,
         }
 
-        let mut stack: Vec<temp> = Vec::new();
+        let mut stack: Vec<StackEntry> = Vec::new();
 
         loop {
-            let mut source_operator = self.source_operator.as_mut().unwrap();
-            let mut input_batch = RecordBatch::new_empty(source_operator.schema());
-            let source_result = source_operator.get_data(&mut input_batch);
-
+            let source_operator = self.source_operator.as_mut().unwrap();
+            let source_result = source_operator.get_data();
             match source_result {
-                SourceResultType::HaveMoreOutput => {}
-                SourceResultType::Finished => {
+                SourceResultType::HaveMoreOutput(batch) => {
+                    stack.push(StackEntry {
+                        index: 0,
+                        input: batch
+                    });
+                }
+                SourceResultType::Finished(_) => {
                     break;
                 }
             }
-            stack.push(temp {
-                index: 0,
-                input: Rc::new(input_batch),
-            });
 
             loop {
                 if stack.is_empty() {
                     break;
                 }
 
-                let temp { index, input } = stack.pop().unwrap();
+                let StackEntry{ index, input } = stack.pop().unwrap();
                 if index >= self.operators.len() {
-                    let sink = self.sink_operator.as_ref().unwrap();
-                    let sink_result = sink.sink(&*input);
+                    let sink = self.sink_operator.as_mut().unwrap();
+                    sink.sink(&input);
                 } else {
-                    let op = &self.operators[index];
-                    let mut output_batch = Rc::new(RecordBatch::new_empty(op.schema()));
-                    let intermediate_result = op.execute(&*input, &mut output_batch);
-
+                    let op = self.operators[index].as_mut();
+                    let intermediate_result = op.execute(&input);
                     match intermediate_result {
-                        OperatorResultType::HaveMoreOutput => stack.push(temp { index, input }),
-                        OperatorResultType::Finished => {}
+                        OperatorResultType::HaveMoreOutput(batch) => {
+                            stack.push(StackEntry { index, input });
+                            stack.push(StackEntry { index: index + 1, input: batch});
+                        },
+                        OperatorResultType::Finished(batch) => {
+                            stack.push(StackEntry { index: index + 1, input: batch});
+                        }
                     }
-                    stack.push(temp {
-                        index: index + 1,
-                        input: output_batch,
-                    })
                 }
             }
         }

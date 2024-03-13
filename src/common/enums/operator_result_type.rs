@@ -1,11 +1,14 @@
+use std::sync::Arc;
+use datafusion::arrow::array::RecordBatch;
+
 pub enum OperatorResultType {
-    HaveMoreOutput,
-    Finished,
+    HaveMoreOutput(Arc<RecordBatch>),
+    Finished(Arc<RecordBatch>),
 }
 
 pub enum SourceResultType {
-    HaveMoreOutput,
-    Finished,
+    HaveMoreOutput(Arc<RecordBatch>),
+    Finished(Arc<RecordBatch>),
 }
 
 pub enum SinkResultType {

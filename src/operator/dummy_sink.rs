@@ -1,5 +1,4 @@
 use crate::common::enums::operator_result_type::SinkResultType;
-use crate::common::types::LogicalType;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
@@ -10,6 +9,14 @@ pub struct DummySinkOperator;
 impl DummySinkOperator {
     pub fn new() -> Self {
         DummySinkOperator {}
+    }
+}
+
+impl Sink for DummySinkOperator {
+    fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
+        println!("Sinking");
+        println!("{:?}", *input);
+        SinkResultType::Finished
     }
 }
 
@@ -24,13 +31,5 @@ impl PhysicalOperator for DummySinkOperator {
 
     fn is_sink(&self) -> bool {
         true
-    }
-}
-
-impl Sink for DummySinkOperator {
-    fn sink(&self, chunk: &RecordBatch) -> SinkResultType {
-        println!("Sinking");
-        println!("{:?}", chunk);
-        SinkResultType::Finished
     }
 }
