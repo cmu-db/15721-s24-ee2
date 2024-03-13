@@ -15,8 +15,16 @@ async fn main() -> Result<()> {
         CsvReadOptions::new(),
     )
     .await?;
+    // ctx.register_csv(
+    //     "aggregate_test_101",
+    //     &format!("./testing/data/csv/aggregate_test_100.csv"),
+    //     CsvReadOptions::new(),
+    // )
+    // .await?;
     // sql query
     let sql = "SELECT c12  FROM aggregate_test_100 WHERE c12 < 0.3 AND c1='b'";
+    // let sql =
+    //     "SELECT aggregate_test_100.c1 FROM aggregate_test_100 JOIN aggregate_test_101 ON aggregate_test_100.c2 < aggregate_test_101.c3";
     // create datafusion logical plan
     let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
     // create datafusion physical plan (trait)
