@@ -32,8 +32,14 @@ async fn run_pipeline(ctx: &SessionContext, sql: &str) -> Result<(), DataFusionE
         "Detailed physical plan:\n{}",
         displayable(plan.as_ref()).indent(true)
     );
+    // 1 value is not being used, fix it
+    let scheduler_pipeline =
+        vayu::SchedulerPipeline::new(plan, vayu::SchedulerSinkType::RecordBatchStorage);
 
-    let results = vayu::execute(vayu::SchedulerPipeline { plan }).unwrap();
-    pretty::print_batches(&results)?;
+    let results = vayu::execute(scheduler_pipeline).unwrap();
+    match results {
+        vayu::SchedulerSink::ReturnOutput(results) => pretty::print_batches(&results)?,
+        vayu::SchedulerSink::RecordBatchStorage(uuid) => println!("uuid is {uuid}"),
+    }
     Ok(())
 }
