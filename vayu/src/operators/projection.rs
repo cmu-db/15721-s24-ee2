@@ -16,7 +16,7 @@ impl ProjectionOperator {
 }
 
 impl IntermediateOperator for ProjectionOperator {
-    fn execute(&self, input: &RecordBatch) -> Result<RecordBatch> {
+    fn execute(&mut self, input: &RecordBatch) -> Result<RecordBatch> {
         batch_project(input, self.expr.clone(), self.schema.clone())
     }
 }

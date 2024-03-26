@@ -8,8 +8,15 @@ pub mod pipeline;
 pub mod store;
 use crate::store::Blob;
 use crate::store::Store;
+use arrow::util::pretty;
+use datafusion::execution::memory_pool::MemoryReservation;
+use datafusion::physical_plan::joins::HashJoinExec;
+
+use ahash::RandomState;
+use arrow::datatypes::Schema;
+use datafusion::physical_expr::PhysicalExprRef;
+use datafusion::physical_plan::joins::hash_join;
 use datafusion::physical_plan::ExecutionPlan;
-use std::result;
 use std::sync::Arc;
 
 pub struct VayuExecutionEngine {
@@ -27,7 +34,14 @@ impl VayuExecutionEngine {
         let plan = scheduler_pipeline.plan;
         let sink_type = scheduler_pipeline.sink;
         // convert execution plan to a pipeline
-        let pipeline = Pipeline::new(plan);
+        let p = plan.as_any();
+        let do_build_phase = if let Some(_) = p.downcast_ref::<HashJoinExec>() {
+            true
+        } else {
+            false
+        };
+
+        let pipeline = Pipeline::new(plan, &mut self.store, do_build_phase);
         // execute the plan to get the results
         let mut pipeline_executor = PipelineExecutor::new(pipeline);
         let result = pipeline_executor.execute().unwrap();
@@ -51,15 +65,43 @@ impl VayuExecutionEngine {
                 // TODO: update not replace
                 Ok(SchedulerSink::RecordBatchStorage(uuid))
             }
+            SchedulerSinkType::HashMapStorage(uuid, info) => {
+                println!("hash map while storing");
+                pretty::print_batches(&result).unwrap();
+                println!("hash map printing done");
+
+                // TODO: update this to real stuff
+                let hash_map = hash_join::create_hash_build_map(
+                    result,
+                    info.random_state,
+                    info.on_left,
+                    info.schema,
+                    info.reservation,
+                )
+                .unwrap();
+                let blob = Blob::HashMapBlob(hash_map);
+                self.store.insert(uuid, blob);
+                Ok(SchedulerSink::ReturnOutput(Vec::new()))
+            }
         }
     }
 }
 pub enum SchedulerSink {
     RecordBatchStorage(i32),
+    // HashMapStorage(i32),
     ReturnOutput(Vec<RecordBatch>),
 }
+
+pub struct HashMapInfo {
+    pub random_state: RandomState,
+    pub on_left: Vec<PhysicalExprRef>,
+    pub schema: Arc<Schema>,
+    pub reservation: MemoryReservation,
+}
+
 pub enum SchedulerSinkType {
     RecordBatchStorage(i32),
+    HashMapStorage(i32, HashMapInfo),
     ReturnOutput,
 }
 

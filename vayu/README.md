@@ -77,3 +77,9 @@ https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/dedicated-hosts-overview.
 
 
 https://docs.google.com/document/d/1txX60thXn1tQO1ENNT8rwfU3cXLofa7ZccnvP4jD6AA/edit#heading=h.3iwlbn2gzs29
+
+
+
+1. Sum 
+2. HashJoin 
+3. Breaking HashJoin in two parts discuss with aditya from scheduler

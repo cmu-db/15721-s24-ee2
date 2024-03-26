@@ -1,16 +1,15 @@
 use arrow::array::RecordBatch;
-use arrow::error::Result;
+use datafusion::physical_plan::joins::hash_join::JoinLeftData;
 
 use core::panic;
 use std::collections::HashMap;
-use std::sync::Arc;
 pub enum Blob {
     RecordBatchBlob(Vec<RecordBatch>),
-    HashMapBlob(HashMap<i32, i32>),
+    HashMapBlob(JoinLeftData),
 }
 
 impl Blob {
-    pub fn get_map(self) -> HashMap<i32, i32> {
+    pub fn get_map(self) -> JoinLeftData {
         match self {
             Blob::HashMapBlob(m) => m,
             _ => panic!("error"),

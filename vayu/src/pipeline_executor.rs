@@ -25,7 +25,8 @@ impl PipelineExecutor {
             let data = futures::executor::block_on(source.next());
             match data {
                 Some(data) => {
-                    let output = Self::ExecutePushInternal(&self.pipeline.operators, data.unwrap());
+                    let output =
+                        Self::execute_push_internal(&mut self.pipeline.operators, data.unwrap());
                     results.push(output)
                 }
                 // no data left to be processed
@@ -39,11 +40,11 @@ impl PipelineExecutor {
      * and returns the final  record batch. synchronous code. faster.
      * no operator can be blocked (for now).
      */
-    fn ExecutePushInternal(
-        operators: &Vec<Box<dyn IntermediateOperator>>,
+    fn execute_push_internal(
+        operators: &mut Vec<Box<dyn IntermediateOperator>>,
         mut data: RecordBatch,
     ) -> RecordBatch {
-        for x in operators {
+        for mut x in operators {
             println!(
                 "running operator {} size {}x{}",
                 x.name(),
