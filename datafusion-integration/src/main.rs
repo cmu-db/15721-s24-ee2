@@ -11,7 +11,12 @@ use ahash::RandomState;
 use vayu::VayuExecutionEngine;
 #[tokio::main]
 async fn main() -> Result<()> {
-    // create local execution context
+    test_scan_filter_project().await?;
+    // test_hash_join().await?;
+    Ok(())
+}
+
+async fn test_hash_join() -> Result<()> {
     let ctx: SessionContext = SessionContext::new();
     // register csv file with the execution context
     ctx.register_csv(
@@ -28,12 +33,13 @@ async fn main() -> Result<()> {
     .await?;
     let mut executor = VayuExecutionEngine::new();
     let uuid = 1;
-    // let sql1 = "SELECT *  FROM aggregate_test_100 JOIN aggregate_test_100 ON c1";
-    let sql1 = "SELECT *  FROM a,b WHERE a.a1 = b.b1+1 ";
+    let sql1 = "SELECT *  FROM a,b WHERE a.a1 = b.b1 ";
+    // This part would be done in other parts of database
     let plan1 = util::get_execution_plan_from_sql(&ctx, sql1).await?;
     let probe_plan = plan1.clone();
-    let build_plan = util::get_hash_build_pipeline(plan1);
-    let p = build_plan.as_any();
+    let build_plan = util::get_hash_build_pipeline(plan1.clone());
+    let join_node = util::get_hash_join_node(plan1);
+    let p = join_node.as_any();
     let info = if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
         let on_left = exec.on().iter().map(|on| on.0.clone()).collect::<Vec<_>>();
         let reservation =
@@ -62,11 +68,6 @@ async fn main() -> Result<()> {
         vayu::SchedulerSinkType::ReturnOutput,
     )
     .await?;
-
-    // let blob = executor.store.remove(2).unwrap();
-    // let results = blob.get_records();
-
-    // pretty::print_batches(&results)?;
 
     Ok(())
 }

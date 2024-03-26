@@ -8,14 +8,13 @@ pub mod pipeline;
 pub mod store;
 use crate::store::Blob;
 use crate::store::Store;
-use arrow::util::pretty;
-use datafusion::execution::memory_pool::MemoryReservation;
-use datafusion::physical_plan::joins::HashJoinExec;
-
 use ahash::RandomState;
 use arrow::datatypes::Schema;
+use arrow::util::pretty;
+use datafusion::execution::memory_pool::MemoryReservation;
 use datafusion::physical_expr::PhysicalExprRef;
 use datafusion::physical_plan::joins::hash_join;
+use datafusion::physical_plan::joins::HashJoinExec;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
 
@@ -34,14 +33,7 @@ impl VayuExecutionEngine {
         let plan = scheduler_pipeline.plan;
         let sink_type = scheduler_pipeline.sink;
         // convert execution plan to a pipeline
-        let p = plan.as_any();
-        let do_build_phase = if let Some(_) = p.downcast_ref::<HashJoinExec>() {
-            true
-        } else {
-            false
-        };
-
-        let pipeline = Pipeline::new(plan, &mut self.store, do_build_phase);
+        let pipeline = Pipeline::new(plan, &mut self.store);
         // execute the plan to get the results
         let mut pipeline_executor = PipelineExecutor::new(pipeline);
         let result = pipeline_executor.execute().unwrap();

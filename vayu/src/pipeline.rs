@@ -24,19 +24,17 @@ pub struct Pipeline {
     pub sink: Option<SendableRecordBatchStream>,
     pub operators: Vec<Box<dyn IntermediateOperator>>,
     pub state: PipelineState,
-    pub do_build_phase: bool,
 }
 pub struct PipelineState {
     pub schema: Option<Arc<Schema>>,
 }
 impl Pipeline {
-    pub fn new(plan: Arc<dyn ExecutionPlan>, store: &mut Store, do_build_phase: bool) -> Pipeline {
+    pub fn new(plan: Arc<dyn ExecutionPlan>, store: &mut Store) -> Pipeline {
         let mut pipeline = Pipeline {
             source: None,
             sink: None,
             operators: vec![],
             state: PipelineState { schema: None },
-            do_build_phase,
         };
         make_pipeline(&mut pipeline, plan, store);
         pipeline
@@ -74,26 +72,21 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
         return;
     }
     if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
-        if pipeline.do_build_phase {
-            make_pipeline(pipeline, exec.left().clone(), store);
-            println!("doing hashbuild");
-            // in build phase you dont do anything
-            // building hashmap is done after completing the pipeline
-        } else {
-            make_pipeline(pipeline, exec.right().clone(), store);
-            println!("adding hashprobe");
-            let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
-            let build_map = store.remove(1).unwrap();
-            let left_data = Arc::new(build_map.get_map());
-            let visited_left_side = BooleanBufferBuilder::new(0);
-            hashjoinstream.build_side = BuildSide::Ready(BuildSideReadyState {
-                left_data,
-                visited_left_side,
-            });
-            // println!("{:?}", left_data);
-            let tt = Box::new(HashProbeOperator::new(hashjoinstream));
-            pipeline.operators.push(tt);
-        }
+        // this function will only be called for probe side
+        // build side wont have hashjoinexec in make_pipeline call
+        make_pipeline(pipeline, exec.right().clone(), store);
+        println!("adding hashprobe");
+        let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
+        let build_map = store.remove(1).unwrap();
+        let left_data = Arc::new(build_map.get_map());
+        let visited_left_side = BooleanBufferBuilder::new(0);
+        hashjoinstream.build_side = BuildSide::Ready(BuildSideReadyState {
+            left_data,
+            visited_left_side,
+        });
+        // println!("{:?}", left_data);
+        let tt = Box::new(HashProbeOperator::new(hashjoinstream));
+        pipeline.operators.push(tt);
         return;
     }
     if let Some(exec) = p.downcast_ref::<RepartitionExec>() {

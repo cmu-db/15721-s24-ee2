@@ -15,8 +15,13 @@ use std::sync::Arc;
 pub fn get_hash_build_pipeline(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     let p = plan.as_any();
 
-    if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
-        return plan;
+    if let Some(_) = p.downcast_ref::<HashJoinExec>() {
+        let children = plan.children();
+        if let Some(first_child) = children.get(0) {
+            return first_child.clone();
+        } else {
+            panic!("No children found!");
+        }
     }
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         panic!("should never reach csvexec in get_hash_build_pipeline ");
@@ -34,6 +39,27 @@ pub fn get_hash_build_pipeline(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn Executio
     }
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
         return get_hash_build_pipeline(exec.input().clone());
+    }
+    return plan;
+}
+
+pub fn get_hash_join_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
+    let p = plan.as_any();
+
+    if let Some(_) = p.downcast_ref::<HashJoinExec>() {
+        return plan;
+    }
+    if let Some(exec) = p.downcast_ref::<FilterExec>() {
+        return get_hash_join_node(exec.input().clone());
+    }
+    if let Some(exec) = p.downcast_ref::<ProjectionExec>() {
+        return get_hash_join_node(exec.input().clone());
+    }
+    if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
+        return get_hash_join_node(exec.input().clone());
+    }
+    if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
+        return get_hash_join_node(exec.input().clone());
     }
     return plan;
 }
