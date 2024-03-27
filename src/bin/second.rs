@@ -1,13 +1,11 @@
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
-use datafusion::logical_expr::tree_node::expr;
 use datafusion::logical_expr::{col,lit};
 use datafusion::physical_expr::create_physical_expr;
 use ee2::operator::dummy_sink::DummySinkOperator;
 use ee2::operator::hash_join::{HashJoinBuildOperator, HashJoinProbeOperator, JoinLeftData};
 use ee2::operator::filter::FilterOperator;
-use ee2::operator::projection::ProjectionOperator;
 use ee2::operator::scan::ScanOperator;
 use ee2::parallel::pipeline::Pipeline;
 use ee2::physical_operator::{IntermediateOperator, Sink, Source};
@@ -90,7 +88,9 @@ fn main() {
     ).unwrap();
 
     let v = vec![join_expr];
-    let build_data = JoinLeftData{ hash_table: build.hash_table, hasher: build.hasher, original: build.original };
+    let build_data = JoinLeftData{
+        hash_table: build.hash_table, originals: build.originals, schema: build.schema
+    };
     let probe : Box<dyn IntermediateOperator> = Box::new(HashJoinProbeOperator::new(v, Arc::new(schema), build_data));
 
     //create dummy sink printing operator

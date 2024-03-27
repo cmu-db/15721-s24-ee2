@@ -11,8 +11,7 @@ pub struct ProjectionOperator {
 impl ProjectionOperator {
     pub fn new(input_schema: Arc<Schema>, expr: Vec<(Arc<dyn PhysicalExpr>, String)>) -> ProjectionOperator {
         let num_output_fields = expr.len();
-        let mut fields = Vec::new();
-        fields.reserve(num_output_fields);
+        let mut fields = Vec::with_capacity(num_output_fields);
         for (e, name) in &expr {
             let field = Field::new(
                 name,
