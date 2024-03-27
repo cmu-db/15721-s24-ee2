@@ -1,3 +1,4 @@
+use std::any::Any;
 use crate::common::enums::operator_result_type::{
     OperatorResultType, SinkResultType, SourceResultType,
 };
@@ -16,6 +17,7 @@ pub trait PhysicalOperator {
 pub trait Sink: PhysicalOperator {
     // Sink method is called constantly with new input, as long as new input is available
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType;
+    fn as_any(&self) -> &dyn Any;
 }
 
 //Operators that implement Source trait emit data

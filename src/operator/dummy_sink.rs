@@ -1,6 +1,6 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::physical_operator::{PhysicalOperator, Sink};
-use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::array::{RecordBatch, RecordBatchIterator};
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
 
@@ -17,6 +17,10 @@ impl Sink for DummySinkOperator {
         println!("Sinking");
         println!("{:?}", *input);
         SinkResultType::Finished
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
