@@ -40,7 +40,7 @@ impl PipelineExecutor {
         operators: &mut Vec<Box<dyn IntermediateOperator>>,
         mut data: RecordBatch,
     ) -> RecordBatch {
-        for mut x in operators {
+        for x in operators {
             println!(
                 "running operator {} size {}x{}",
                 x.name(),

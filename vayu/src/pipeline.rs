@@ -3,6 +3,7 @@ use crate::operators::join::HashProbeOperator;
 use crate::operators::projection::ProjectionOperator;
 use crate::store::Store;
 use arrow::array::BooleanBufferBuilder;
+use core::panic;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::datasource::physical_plan::CsvExec;
 use datafusion::error::Result;
@@ -74,6 +75,7 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
         make_pipeline(pipeline, exec.right().clone(), store);
         println!("adding hashprobe");
         let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
+        // using uuid but this value would be present in HashProbeExec itself
         let build_map = store.remove(pipeline.state.uuid).unwrap();
         let left_data = Arc::new(build_map.get_map());
         let visited_left_side = BooleanBufferBuilder::new(0);
@@ -81,7 +83,6 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
             left_data,
             visited_left_side,
         });
-        // println!("{:?}", left_data);
         let tt = Box::new(HashProbeOperator::new(hashjoinstream));
         pipeline.operators.push(tt);
         return;
@@ -89,13 +90,12 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
     if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
         make_pipeline(pipeline, exec.input().clone(), store);
         return;
-        // pipeline.operators.push(FilterOperator::new())
     }
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
         make_pipeline(pipeline, exec.input().clone(), store);
         return;
-        // pipeline.operators.push(FilterOperator::new())
     }
+    panic!("should never reach the end");
 }
 pub trait PhysicalOperator {
     fn name(&self) -> String;

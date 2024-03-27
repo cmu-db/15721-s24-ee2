@@ -9,10 +9,11 @@ pub mod sinks;
 
 pub mod store;
 use crate::sinks::SchedulerSinkType;
+use crate::store::Blob::{HashMapBlob, RecordBatchBlob};
 use crate::store::Store;
+use core::panic;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
-
 pub struct VayuExecutionEngine {
     pub store: Store,
 }
@@ -26,7 +27,6 @@ impl VayuExecutionEngine {
 
     pub fn execute(&mut self, scheduler_pipeline: SchedulerPipeline) {
         let plan = scheduler_pipeline.plan;
-        let sink_type = scheduler_pipeline.sink;
         // convert execution plan to a pipeline
 
         let pipeline = Pipeline::new(plan, &mut self.store, 1);
@@ -37,7 +37,8 @@ impl VayuExecutionEngine {
         // do the sinking - very simple API
         // no need to create a seperate class and introduce indirection unless it moves out of hands
         // to call one function we would need 30+ lines otherwise
-        match sink_type {
+        let sink: SchedulerSinkType = scheduler_pipeline.sink;
+        match sink {
             SchedulerSinkType::PrintOutput => {
                 pretty::print_batches(&result).unwrap();
             }
@@ -50,6 +51,20 @@ impl VayuExecutionEngine {
                 self.store.insert(uuid, map.unwrap());
             }
         };
+    }
+    pub fn sink(&mut self, uuid: i32) {
+        let blob = self.store.remove(uuid);
+        match blob {
+            Some(blob) => match blob {
+                RecordBatchBlob(result) => {
+                    pretty::print_batches(&result).unwrap();
+                }
+                HashMapBlob(results) => {
+                    pretty::print_batches(&[results.batch().clone()]).unwrap();
+                }
+            },
+            None => panic!("no blob for {uuid} found"),
+        }
     }
 }
 pub struct SchedulerPipeline {
