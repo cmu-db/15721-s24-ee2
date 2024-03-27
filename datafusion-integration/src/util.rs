@@ -12,20 +12,21 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 
-pub fn get_hash_build_pipeline(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
+/**
+ * returns (join_node, build_plan)
+ * Note: build_plan won't have join node
+ */
+pub fn get_hash_build_pipeline(
+    plan: Arc<dyn ExecutionPlan>,
+) -> (Arc<dyn ExecutionPlan>, Arc<dyn ExecutionPlan>) {
+    let plan1 = plan.clone();
     let p = plan.as_any();
 
-    if let Some(_) = p.downcast_ref::<HashJoinExec>() {
-        let children = plan.children();
-        if let Some(first_child) = children.get(0) {
-            return first_child.clone();
-        } else {
-            panic!("No children found!");
-        }
+    if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
+        return (plan1, exec.left().clone());
     }
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         panic!("should never reach csvexec in get_hash_build_pipeline ");
-        return plan;
     }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         return get_hash_build_pipeline(exec.input().clone());
@@ -33,35 +34,13 @@ pub fn get_hash_build_pipeline(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn Executio
     if let Some(exec) = p.downcast_ref::<ProjectionExec>() {
         return get_hash_build_pipeline(exec.input().clone());
     }
-
     if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
         return get_hash_build_pipeline(exec.input().clone());
     }
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
         return get_hash_build_pipeline(exec.input().clone());
     }
-    return plan;
-}
-
-pub fn get_hash_join_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
-    let p = plan.as_any();
-
-    if let Some(_) = p.downcast_ref::<HashJoinExec>() {
-        return plan;
-    }
-    if let Some(exec) = p.downcast_ref::<FilterExec>() {
-        return get_hash_join_node(exec.input().clone());
-    }
-    if let Some(exec) = p.downcast_ref::<ProjectionExec>() {
-        return get_hash_join_node(exec.input().clone());
-    }
-    if let Some(exec) = p.downcast_ref::<RepartitionExec>() {
-        return get_hash_join_node(exec.input().clone());
-    }
-    if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
-        return get_hash_join_node(exec.input().clone());
-    }
-    return plan;
+    panic!("No join node found");
 }
 
 pub async fn get_execution_plan_from_sql(

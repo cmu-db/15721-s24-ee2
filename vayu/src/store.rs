@@ -47,6 +47,15 @@ impl Store {
     pub fn insert(&mut self, key: i32, value: Blob) {
         self.store.insert(key, value);
     }
+    pub fn append(&mut self, key: i32, value: Vec<RecordBatch>) {
+        let blob = self.remove(key);
+        let mut blob = match blob {
+            Some(r) => r,
+            None => Blob::RecordBatchBlob(Vec::new()),
+        };
+        blob.append_records(value);
+        self.store.insert(key, blob);
+    }
     pub fn remove(&mut self, key: i32) -> Option<Blob> {
         self.store.remove(&key)
     }

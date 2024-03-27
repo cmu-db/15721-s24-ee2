@@ -21,17 +21,13 @@ impl PipelineExecutor {
         println!("source is present");
         loop {
             // read from source until finished.
-            // todo: each source record batch can be processed in seperate thread.
             let data = futures::executor::block_on(source.next());
-            match data {
-                Some(data) => {
-                    let output =
-                        Self::execute_push_internal(&mut self.pipeline.operators, data.unwrap());
-                    results.push(output)
-                }
-                // no data left to be processed
-                None => break,
+            if data.is_none() {
+                break;
             }
+            let data = data.unwrap().unwrap();
+            let output = Self::execute_push_internal(&mut self.pipeline.operators, data);
+            results.push(output)
         }
         Ok(results)
     }

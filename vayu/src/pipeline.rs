@@ -4,7 +4,6 @@ use crate::operators::projection::ProjectionOperator;
 use crate::store::Store;
 use arrow::array::BooleanBufferBuilder;
 use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::Schema;
 use datafusion::datasource::physical_plan::CsvExec;
 use datafusion::error::Result;
 use datafusion::execution::context::SessionContext;
@@ -21,20 +20,18 @@ use datafusion::prelude::SessionConfig;
 use std::sync::Arc;
 pub struct Pipeline {
     pub source: Option<SendableRecordBatchStream>,
-    pub sink: Option<SendableRecordBatchStream>,
     pub operators: Vec<Box<dyn IntermediateOperator>>,
     pub state: PipelineState,
 }
 pub struct PipelineState {
-    pub schema: Option<Arc<Schema>>,
+    uuid: i32,
 }
 impl Pipeline {
-    pub fn new(plan: Arc<dyn ExecutionPlan>, store: &mut Store) -> Pipeline {
+    pub fn new(plan: Arc<dyn ExecutionPlan>, store: &mut Store, uuid: i32) -> Pipeline {
         let mut pipeline = Pipeline {
             source: None,
-            sink: None,
             operators: vec![],
-            state: PipelineState { schema: None },
+            state: PipelineState { uuid },
         };
         make_pipeline(&mut pipeline, plan, store);
         pipeline
@@ -77,7 +74,7 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
         make_pipeline(pipeline, exec.right().clone(), store);
         println!("adding hashprobe");
         let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
-        let build_map = store.remove(1).unwrap();
+        let build_map = store.remove(pipeline.state.uuid).unwrap();
         let left_data = Arc::new(build_map.get_map());
         let visited_left_side = BooleanBufferBuilder::new(0);
         hashjoinstream.build_side = BuildSide::Ready(BuildSideReadyState {
@@ -102,12 +99,6 @@ fn make_pipeline(pipeline: &mut Pipeline, plan: Arc<dyn ExecutionPlan>, store: &
 }
 pub trait PhysicalOperator {
     fn name(&self) -> String;
-}
-
-//Operators that implement Sink trait consume data
-pub trait Sink: PhysicalOperator {
-    // Sink method is called constantly with new input, as long as new input is available
-    fn sink(&self, chunk: &mut RecordBatch) -> bool;
 }
 
 //Operators that implement Source trait emit data
