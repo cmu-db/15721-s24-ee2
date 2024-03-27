@@ -1,9 +1,5 @@
-[workspace] 
-members = ["datafusion-integration", "lighting", "vayu"] 
-exclude = ["arrow-datafusion"]
-
 [package]
-name = "ee2"
+name = "vayu"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,3 +8,7 @@ edition = "2021"
 [dependencies]
 arrow = { version = "50.0.0"}
 tokio = { version = "1.4.0", features = ["rt", "rt-multi-thread", "macros"] }
+futures = { version = "0.3.28" }
+datafusion = { version = "36.0.0", path = "../arrow-datafusion/datafusion/core"}
+datafusion-proto = { version = "36.0.0", path = "../arrow-datafusion/datafusion/proto"}
+ahash = "0.8.11"
