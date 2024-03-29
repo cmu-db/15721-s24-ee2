@@ -1,8 +1,8 @@
-use crate::pipeline::{PhysicalOperator, Source};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::physical_plan::SendableRecordBatchStream;
 use futures::stream::StreamExt;
 use tokio::task;
+use vayu_common::{PhysicalOperator, Source};
 pub struct ScanOperator {
     stream: SendableRecordBatchStream,
 }

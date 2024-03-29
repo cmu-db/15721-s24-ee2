@@ -1,8 +1,8 @@
-use crate::pipeline::{IntermediateOperator, PhysicalOperator};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::error::Result;
 use datafusion::physical_plan::filter::batch_filter;
 use datafusion::physical_plan::PhysicalExpr;
+use vayu_common::{IntermediateOperator, PhysicalOperator};
 
 use std::sync::Arc;
 pub struct FilterOperator {

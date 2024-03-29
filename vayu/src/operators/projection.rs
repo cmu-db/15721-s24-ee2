@@ -1,10 +1,10 @@
-use crate::pipeline::{IntermediateOperator, PhysicalOperator};
 use arrow::datatypes::SchemaRef;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::error::Result;
 use datafusion::physical_plan::projection::batch_project;
 use datafusion::physical_plan::PhysicalExpr;
 use std::sync::Arc;
+use vayu_common::{IntermediateOperator, PhysicalOperator};
 pub struct ProjectionOperator {
     expr: Vec<Arc<dyn PhysicalExpr>>,
     schema: SchemaRef,

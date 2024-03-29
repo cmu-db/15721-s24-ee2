@@ -1,8 +1,9 @@
-use crate::pipeline::IntermediateOperator;
-use crate::pipeline::Pipeline;
 use arrow::array::RecordBatch;
 use arrow::error::Result;
 use futures::StreamExt;
+use vayu_common::IntermediateOperator;
+use vayu_common::Pipeline;
+use vayu_common::SchedulerSourceType;
 pub struct PipelineExecutor {
     pipeline: Pipeline,
 }
@@ -10,26 +11,6 @@ pub struct PipelineExecutor {
 impl PipelineExecutor {
     pub fn new(pipeline: Pipeline) -> Self {
         PipelineExecutor { pipeline }
-    }
-    pub fn execute(&mut self) -> Result<Vec<RecordBatch>> {
-        let mut results: Vec<RecordBatch> = vec![];
-        if self.pipeline.source.is_none() {
-            panic!("no source");
-        }
-        let source = self.pipeline.source.as_mut().unwrap();
-
-        println!("source is present");
-        loop {
-            // read from source until finished.
-            let data = futures::executor::block_on(source.next());
-            if data.is_none() {
-                break;
-            }
-            let data = data.unwrap().unwrap();
-            let output = Self::execute_push_internal(&mut self.pipeline.operators, data);
-            results.push(output)
-        }
-        Ok(results)
     }
     /**
      * takes a record batch and passes it through all the operators

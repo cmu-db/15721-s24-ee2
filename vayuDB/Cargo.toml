@@ -1,14 +1,14 @@
 [package]
-name = "vayu"
+name = "vayuDB"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrow = { version = "50.0.0"}
-tokio = { version = "1.4.0", features = ["rt", "rt-multi-thread", "macros"] }
-futures = { version = "0.3.28" }
+vayu = { version = "0.1.0", path = "../vayu"}
 datafusion = { version = "36.0.0", path = "../arrow-datafusion/datafusion/core"}
 vayu-common = { version = "0.1.0", path = "../vayu-common"}
-ahash = "0.8.11"
+futures = { version = "0.3.28" }
+heapless = "0.8.0"
+crossbeam-channel = "0.5"

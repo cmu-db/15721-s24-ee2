@@ -42,20 +42,3 @@ pub fn get_hash_build_pipeline(
     }
     panic!("No join node found");
 }
-
-pub async fn get_execution_plan_from_sql(
-    ctx: &SessionContext,
-    sql: &str,
-) -> Result<Arc<dyn ExecutionPlan>> {
-    // create datafusion logical plan
-    let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
-    // create datafusion physical plan
-    let plan = SessionState::create_physical_plan(&ctx.state(), &logical_plan).await?;
-    // print datafusion physical plan
-    println!(
-        "Detailed physical plan:\n{}",
-        displayable(plan.as_ref()).indent(true)
-    );
-    // panic!("hello");
-    Ok(plan)
-}

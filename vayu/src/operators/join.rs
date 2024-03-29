@@ -1,17 +1,17 @@
-use crate::pipeline::{IntermediateOperator, PhysicalOperator};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::error::Result;
 use datafusion::physical_plan::joins::hash_join::{
     create_hashes_outer, HashJoinStream, HashJoinStreamState, ProcessProbeBatchState,
 };
 use datafusion::physical_plan::joins::utils::StatefulStreamResult;
+use vayu_common::{IntermediateOperator, PhysicalOperator};
 pub struct HashProbeOperator {
+    build_uuid: i32,
     probe: HashJoinStream,
 }
-
 impl HashProbeOperator {
-    pub fn new(probe: HashJoinStream) -> Self {
-        Self { probe }
+    pub fn new(build_uuid: i32, probe: HashJoinStream) -> Self {
+        Self { build_uuid, probe }
     }
 }
 
