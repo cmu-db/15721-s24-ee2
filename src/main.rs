@@ -18,7 +18,7 @@ fn main() {
     ]);
     let scan: Option<Box<dyn Source>> = Some(Box::new(ScanOperator::new(
         Arc::new(schema.clone()),
-        "data/data.csv",
+        "data/data.parquet",
     )));
 
     let expr2 = col("id");
