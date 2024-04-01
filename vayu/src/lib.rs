@@ -29,7 +29,7 @@ impl VayuExecutionEngine {
         let plan = scheduler_pipeline.plan;
         // convert execution plan to a pipeline
 
-        let pipeline = Pipeline::new(plan, &mut self.store, 1);
+        let pipeline = Pipeline::new(plan, &mut self.store, scheduler_pipeline.sink, 1);
         // execute the plan to get the results
         let mut pipeline_executor = PipelineExecutor::new(pipeline);
         let result = pipeline_executor.execute().unwrap();

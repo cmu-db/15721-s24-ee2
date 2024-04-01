@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use crate::pipeline::IntermediateOperator;
 use crate::pipeline::Pipeline;
+use crate::operators::operator_result_type::*;
 use arrow::array::RecordBatch;
 use arrow::error::Result;
-use futures::StreamExt;
 pub struct PipelineExecutor {
     pipeline: Pipeline,
 }
@@ -12,43 +14,54 @@ impl PipelineExecutor {
         PipelineExecutor { pipeline }
     }
     pub fn execute(&mut self) -> Result<Vec<RecordBatch>> {
-        let mut results: Vec<RecordBatch> = vec![];
-        if self.pipeline.source.is_none() {
-            panic!("no source");
+        struct StackEntry {
+            index: usize,
+            input: Arc<RecordBatch>,
         }
-        let source = self.pipeline.source.as_mut().unwrap();
 
-        println!("source is present");
+        let mut stack: Vec<StackEntry> = Vec::new();
+        let mut results: Vec<RecordBatch> = vec![];
+
         loop {
-            // read from source until finished.
-            let data = futures::executor::block_on(source.next());
-            if data.is_none() {
-                break;
+            let source_operator = self.pipeline.source_operator.as_mut().unwrap();
+            let source_result = source_operator.get_data();
+            match source_result {
+                SourceResultType::HaveMoreOutput(batch) => {
+                    stack.push(StackEntry {
+                        index: 0,
+                        input: batch
+                    });
+                }
+                SourceResultType::Finished(_) => {
+                    break;
+                }
             }
-            let data = data.unwrap().unwrap();
-            let output = Self::execute_push_internal(&mut self.pipeline.operators, data);
-            results.push(output)
+
+            loop {
+                if stack.is_empty() {
+                    break;
+                }
+
+                let StackEntry{ index, input } = stack.pop().unwrap();
+                if index >= self.pipeline.operators.len() {
+                    let sink = self.pipeline.sink_operator.as_mut().unwrap();
+                    sink.sink(&input, &mut results);
+                } else {
+                    let op = self.pipeline.operators[index].as_mut();
+                    let intermediate_result = op.execute(&input);
+                    match intermediate_result {
+                        OperatorResultType::HaveMoreOutput(batch) => {
+                            stack.push(StackEntry { index, input });
+                            stack.push(StackEntry { index: index + 1, input: batch});
+                        },
+                        OperatorResultType::Finished(batch) => {
+                            stack.push(StackEntry { index: index + 1, input: batch});
+                        }
+                    }
+                }
+            }
         }
+
         Ok(results)
-    }
-    /**
-     * takes a record batch and passes it through all the operators
-     * and returns the final  record batch. synchronous code. faster.
-     * no operator can be blocked (for now).
-     */
-    fn execute_push_internal(
-        operators: &mut Vec<Box<dyn IntermediateOperator>>,
-        mut data: RecordBatch,
-    ) -> RecordBatch {
-        for x in operators {
-            println!(
-                "running operator {} size {}x{}",
-                x.name(),
-                data.num_rows(),
-                data.num_columns()
-            );
-            data = x.execute(&data).unwrap();
-        }
-        data
     }
 }
