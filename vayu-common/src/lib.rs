@@ -24,40 +24,43 @@ pub enum SchedulerSourceType {
 
 pub enum SchedulerSinkType {
     // StoreRecordBatch(i32),
-    // BuildAndStoreHashMap(i32, Arc<dyn ExecutionPlan>),
+    BuildAndStoreHashMap(i32, Arc<dyn ExecutionPlan>),
     PrintOutput,
 }
+
+pub struct DatafusionPipelineWithSource {
+    pub source: Arc<dyn ExecutionPlan>,
+    pub plan: Arc<dyn ExecutionPlan>,
+    pub sink: Option<SchedulerSinkType>,
+}
+
+pub struct DatafusionPipeline {
+    pub plan: Arc<dyn ExecutionPlan>,
+    pub sink: Option<SchedulerSinkType>,
+}
+
+pub struct DatafusionPipelineWithData {
+    pub pipeline: DatafusionPipeline,
+    pub data: RecordBatch,
+}
+
 pub struct VayuPipeline {
     pub operators: Vec<Box<dyn IntermediateOperator>>,
     pub sink: Option<SchedulerSinkType>,
 }
-pub struct Pipeline {
-    pub source: Option<SendableRecordBatchStream>,
-    pub vayu_pipeline: VayuPipeline,
-}
-pub struct PipelineState {
-    uuid: i32,
-}
-impl Pipeline {
-    pub fn new() -> Self {
-        Pipeline {
-            source: None,
-            vayu_pipeline: VayuPipeline {
-                operators: vec![],
-                sink: None,
-            },
-        }
-    }
-}
 
+pub struct VayuPipelineWithData {
+    pub pipeline: VayuPipeline,
+    pub data: RecordBatch,
+}
 pub struct Task {
-    pub pipelines: Vec<Pipeline>,
+    pub pipelines: Vec<DatafusionPipelineWithSource>,
 }
 impl Task {
     pub fn new() -> Self {
         Task { pipelines: vec![] }
     }
-    pub fn add_pipeline(&mut self, pipeline: Pipeline) {
+    pub fn add_pipeline(&mut self, pipeline: DatafusionPipelineWithSource) {
         self.pipelines.push(pipeline);
     }
 }

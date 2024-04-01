@@ -1,17 +1,21 @@
 use datafusion::arrow::array::RecordBatch;
 use datafusion::error::Result;
 use datafusion::physical_plan::joins::hash_join::{
-    create_hashes_outer, HashJoinStream, HashJoinStreamState, ProcessProbeBatchState,
+    create_hashes_outer, HashJoinStream, HashJoinStreamState, JoinLeftData, ProcessProbeBatchState,
 };
 use datafusion::physical_plan::joins::utils::StatefulStreamResult;
 use vayu_common::{IntermediateOperator, PhysicalOperator};
+
 pub struct HashProbeOperator {
-    build_uuid: i32,
     probe: HashJoinStream,
+    build_map: Option<JoinLeftData>,
 }
 impl HashProbeOperator {
     pub fn new(build_uuid: i32, probe: HashJoinStream) -> Self {
-        Self { build_uuid, probe }
+        Self {
+            probe,
+            build_map: None,
+        }
     }
 }
 

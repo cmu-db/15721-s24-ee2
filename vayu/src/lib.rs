@@ -1,17 +1,12 @@
-mod pipeline_executor;
 use arrow::array::RecordBatch;
 use arrow::util::pretty;
-use pipeline_executor::PipelineExecutor;
-use vayu_common::{Pipeline, VayuPipeline};
+use vayu_common::DatafusionPipelineWithData;
+use vayu_common::VayuPipeline;
 pub mod operators;
 pub mod pipeline;
 pub mod sinks;
 pub mod store;
-use crate::store::Blob::{HashMapBlob, RecordBatchBlob};
 use crate::store::Store;
-use core::panic;
-use datafusion::physical_plan::ExecutionPlan;
-use std::sync::Arc;
 pub mod df2vayu;
 pub struct VayuExecutionEngine {
     pub store: Store,
@@ -23,7 +18,7 @@ impl VayuExecutionEngine {
             store: Store::new(),
         }
     }
-    pub fn sink(&self, sink: vayu_common::SchedulerSinkType, result: Vec<RecordBatch>) {
+    pub fn sink(&mut self, sink: vayu_common::SchedulerSinkType, result: Vec<RecordBatch>) {
         println!(
             "runningsink size {}x{}",
             result[0].num_rows(),
@@ -32,18 +27,27 @@ impl VayuExecutionEngine {
         match sink {
             vayu_common::SchedulerSinkType::PrintOutput => {
                 pretty::print_batches(&result).unwrap();
-            } // vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
-              //     self.store.append(uuid, result);
-              // }
-              // vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
-              //     let mut sink = sinks::HashMapSink::new(uuid, join_node);
-              //     let map = sink.build_map(result);
-              //     self.store.insert(uuid, map.unwrap());
-              // }
+            }
+            // vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
+            //     self.store.append(uuid, result);
+            // }
+            vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
+                let mut sink = sinks::HashMapSink::new(uuid, join_node);
+                let map = sink.build_map(result);
+                println!("BuildAndStoreHashMap storing in uuid{uuid}");
+                self.store.insert(uuid, map.unwrap());
+            }
         };
     }
+    pub fn execute(&mut self, pipeline: DatafusionPipelineWithData) {
+        let data = pipeline.data;
+        let sink = pipeline.pipeline.sink;
+        let mut pipeline: VayuPipeline = df2vayu::df2vayu(pipeline.pipeline.plan, &mut self.store);
+        pipeline.sink = sink;
 
-    pub fn execute(&mut self, mut pipeline: VayuPipeline, mut data: RecordBatch) {
+        self.execute_internal(pipeline, data);
+    }
+    pub fn execute_internal(&mut self, mut pipeline: VayuPipeline, mut data: RecordBatch) {
         println!("oeprators size {}", pipeline.operators.len());
         for x in &mut pipeline.operators {
             println!(
@@ -56,6 +60,7 @@ impl VayuExecutionEngine {
             println!("done execute");
         }
         println!("runningsink now");
+        assert!(pipeline.sink.is_some());
         self.sink(pipeline.sink.unwrap(), vec![data]);
     }
 
