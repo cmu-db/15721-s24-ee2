@@ -48,7 +48,7 @@ impl VayuExecutionEngine {
         self.execute_internal(pipeline, data);
     }
     pub fn execute_internal(&mut self, mut pipeline: VayuPipeline, mut data: RecordBatch) {
-        println!("oeprators size {}", pipeline.operators.len());
+        println!("operators size {}", pipeline.operators.len());
         for x in &mut pipeline.operators {
             println!(
                 "running operator {} size {}x{}",
@@ -59,7 +59,7 @@ impl VayuExecutionEngine {
             data = x.execute(&data).unwrap();
             println!("done execute");
         }
-        println!("runningsink now");
+        println!("running sink now");
         assert!(pipeline.sink.is_some());
         self.sink(pipeline.sink.unwrap(), vec![data]);
     }

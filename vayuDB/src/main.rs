@@ -1,12 +1,9 @@
 use crossbeam_channel::{bounded, Receiver, Sender};
-use datafusion::arrow::array::RecordBatch;
 use std::collections::HashMap;
 use std::task::Poll;
 use std::thread;
-use vayu::pipeline;
-use vayu_common::{DatafusionPipeline, DatafusionPipelineWithData, VayuPipeline};
+use vayu_common::{DatafusionPipeline, DatafusionPipelineWithData};
 mod dummy_tasks;
-use std::time::Instant;
 mod io_service;
 mod scheduler;
 fn round_robin(worker_id: usize, num_threads: usize) -> usize {
@@ -49,7 +46,7 @@ fn main() {
     loop {
         count += 1;
         // poll scheduler for a new task
-        let pipeline = scheduler.get_task();
+        let pipeline = scheduler.get_pipeline();
 
         if let Poll::Ready(pipeline) = pipeline {
             // TODO: add support for multiple dependent pipeline
@@ -84,11 +81,5 @@ fn main() {
             // assign the next pipeline to some other worker
             worker_id = round_robin(worker_id, num_threads);
         }
-
-        if count == 2 {
-            break;
-        }
     }
-
-    loop {}
 }

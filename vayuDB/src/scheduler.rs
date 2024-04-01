@@ -1,19 +1,23 @@
-use vayu::pipeline;
-
-use crate::dummy_tasks::test_hash_join;
+use crate::dummy_tasks::{test_filter_project, test_hash_join};
 use std::task::Poll;
 pub struct Scheduler {
-    next_task: usize,
+    next_pipeline: usize,
 }
 
 impl Scheduler {
     pub fn new() -> Self {
-        Scheduler { next_task: 0 }
+        Scheduler { next_pipeline: 0 }
     }
-    pub fn get_task(&mut self) -> Poll<vayu_common::DatafusionPipelineWithSource> {
-        let mut task = futures::executor::block_on(test_hash_join()).unwrap();
-        let pipeline = task.pipelines.remove(self.next_task);
-        self.next_task = (self.next_task + 1) % 2;
-        Poll::Ready(pipeline)
+    pub fn get_pipeline(&mut self) -> Poll<vayu_common::DatafusionPipelineWithSource> {
+        if true {
+            let mut task = futures::executor::block_on(test_filter_project()).unwrap();
+            let pipeline = task.pipelines.remove(0);
+            Poll::Ready(pipeline)
+        } else {
+            let mut task = futures::executor::block_on(test_hash_join()).unwrap();
+            let pipeline = task.pipelines.remove(self.next_pipeline);
+            self.next_pipeline = 1 - self.next_pipeline;
+            Poll::Ready(pipeline)
+        }
     }
 }
