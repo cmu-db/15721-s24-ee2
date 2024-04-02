@@ -4,18 +4,24 @@ use vayu_common::DatafusionPipelineWithData;
 use vayu_common::VayuPipeline;
 pub mod operators;
 pub mod pipeline;
+use std::sync::{Arc, Mutex};
+
 pub mod sinks;
-pub mod store;
-use crate::store::Store;
+use vayu_common::store::Store;
 pub mod df2vayu;
 pub struct VayuExecutionEngine {
+    // this is per node store
     pub store: Store,
+    // this is global store
+    pub global_store: Arc<Mutex<Store>>,
+    // Note: only one of them will survive lets see which
 }
 
 impl VayuExecutionEngine {
-    pub fn new() -> VayuExecutionEngine {
+    pub fn new(global_store: Arc<Mutex<Store>>) -> VayuExecutionEngine {
         VayuExecutionEngine {
             store: Store::new(),
+            global_store,
         }
     }
     pub fn sink(&mut self, sink: vayu_common::SchedulerSinkType, result: Vec<RecordBatch>) {
@@ -33,16 +39,25 @@ impl VayuExecutionEngine {
             // }
             vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
                 let mut sink = sinks::HashMapSink::new(uuid, join_node);
-                let map = sink.build_map(result);
+                let hashmap = sink.build_map(result);
                 println!("BuildAndStoreHashMap storing in uuid {uuid}");
-                self.store.insert(uuid, map.unwrap());
+
+                // old store
+                // self.store.insert(uuid, hashmap.unwrap());
+                // new store
+                let mut map = self.global_store.lock().unwrap();
+                map.insert(uuid, hashmap.unwrap());
             }
         };
     }
     pub fn execute(&mut self, pipeline: DatafusionPipelineWithData) {
         let data = pipeline.data;
         let sink = pipeline.pipeline.sink;
-        let mut pipeline: VayuPipeline = df2vayu::df2vayu(pipeline.pipeline.plan, &mut self.store);
+
+        let mut store = self.global_store.lock().unwrap();
+        let mut pipeline: VayuPipeline = df2vayu::df2vayu(pipeline.pipeline.plan, &mut store);
+        drop(store);
+
         pipeline.sink = sink;
 
         self.execute_internal(pipeline, data);

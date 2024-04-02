@@ -2,6 +2,8 @@ use arrow::record_batch::RecordBatch;
 use datafusion::common::Result;
 use datafusion::physical_plan::{ExecutionPlan, SendableRecordBatchStream};
 use std::sync::Arc;
+pub mod store;
+
 pub trait PhysicalOperator {
     fn name(&self) -> String;
 }

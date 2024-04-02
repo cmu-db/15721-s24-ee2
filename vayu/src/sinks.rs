@@ -1,10 +1,10 @@
 use datafusion::physical_plan::joins::hash_join;
 use datafusion::physical_plan::ExecutionPlan;
 
-use crate::store::Blob;
 use crate::RecordBatch;
 use ahash::RandomState;
 use arrow::datatypes::Schema;
+use vayu_common::store::Blob;
 
 use datafusion::execution::memory_pool::MemoryConsumer;
 use datafusion::physical_expr::PhysicalExprRef;

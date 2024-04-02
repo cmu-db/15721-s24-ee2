@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 datafusion = { version = "36.0.0", path = "../arrow-datafusion/datafusion/core"}
 arrow = {}
+crossbeam-utils = "0.8.19"
+crossbeam-skiplist = "0.1.3"
