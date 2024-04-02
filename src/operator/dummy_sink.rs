@@ -1,8 +1,9 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::physical_operator::{PhysicalOperator, Sink};
-use datafusion::arrow::array::{RecordBatch, RecordBatchIterator};
+use datafusion::arrow::array::{RecordBatch};
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
+use datafusion::common::arrow::util::pretty;
 
 pub struct DummySinkOperator;
 
@@ -14,8 +15,7 @@ impl DummySinkOperator {
 
 impl Sink for DummySinkOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
-        println!("Sinking");
-        println!("{:?}", *input);
+        pretty::print_batches(std::slice::from_ref(input.as_ref())).unwrap();
         SinkResultType::Finished
     }
 
