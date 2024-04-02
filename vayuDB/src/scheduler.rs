@@ -9,15 +9,26 @@ impl Scheduler {
         Scheduler { next_pipeline: 0 }
     }
     pub fn get_pipeline(&mut self) -> Poll<vayu_common::DatafusionPipelineWithSource> {
-        if true {
+        if self.next_pipeline % 3 == 0 {
+            // filter and project
+            self.next_pipeline += 1;
             let mut task = futures::executor::block_on(test_filter_project()).unwrap();
             let pipeline = task.pipelines.remove(0);
-            Poll::Ready(pipeline)
-        } else {
+            return Poll::Ready(pipeline);
+        } else if self.next_pipeline % 3 == 1 {
+            // hash build
+            self.next_pipeline += 1;
             let mut task = futures::executor::block_on(test_hash_join()).unwrap();
-            let pipeline = task.pipelines.remove(self.next_pipeline);
-            self.next_pipeline = 1 - self.next_pipeline;
-            Poll::Ready(pipeline)
+            let pipeline = task.pipelines.remove(0);
+            return Poll::Ready(pipeline);
+        } else if self.next_pipeline % 3 == 2 {
+            // hash probe
+            self.next_pipeline += 1;
+            let mut task = futures::executor::block_on(test_hash_join()).unwrap();
+            let pipeline = task.pipelines.remove(1);
+            return Poll::Ready(pipeline);
+        } else {
+            panic!("magic its magic")
         }
     }
 }

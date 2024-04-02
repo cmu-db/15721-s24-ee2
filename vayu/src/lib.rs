@@ -34,7 +34,7 @@ impl VayuExecutionEngine {
             vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
                 let mut sink = sinks::HashMapSink::new(uuid, join_node);
                 let map = sink.build_map(result);
-                println!("BuildAndStoreHashMap storing in uuid{uuid}");
+                println!("BuildAndStoreHashMap storing in uuid {uuid}");
                 self.store.insert(uuid, map.unwrap());
             }
         };
