@@ -8,14 +8,10 @@ use vayu_common::{IntermediateOperator, PhysicalOperator};
 
 pub struct HashProbeOperator {
     probe: HashJoinStream,
-    build_map: Option<JoinLeftData>,
 }
 impl HashProbeOperator {
-    pub fn new(build_uuid: i32, probe: HashJoinStream) -> Self {
-        Self {
-            probe,
-            build_map: None,
-        }
+    pub fn new(probe: HashJoinStream) -> Self {
+        Self { probe }
     }
 }
 
@@ -33,6 +29,9 @@ impl IntermediateOperator for HashProbeOperator {
             &random_state,
         )?;
         probe.hashes_buffer = hashes_buffer.clone();
+
+        // build side has already been added in df2vayu
+        // TODO: move that code in here
         probe.state = HashJoinStreamState::ProcessProbeBatch(ProcessProbeBatchState {
             batch: input.clone(),
             offset: (0, None),

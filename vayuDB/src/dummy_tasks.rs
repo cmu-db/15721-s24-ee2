@@ -1,10 +1,13 @@
+use core::panic;
 use datafusion::error::Result;
 use datafusion::execution::context::SessionState;
+use datafusion::physical_plan::joins::HashJoinExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::CsvReadOptions;
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 use vayu::df2vayu;
+use vayu::operators::join;
 use vayu_common::DatafusionPipelineWithSource;
 use vayu_common::Task;
 
@@ -49,27 +52,27 @@ pub async fn test_hash_join() -> Result<Task> {
         CsvReadOptions::new(),
     )
     .await?;
-    // get executor
 
-    let uuid = 1;
     // get execution plan from th sql query
     let sql = "SELECT *  FROM a,b WHERE a.a1 = b.b1 ";
     let plan = get_execution_plan_from_sql(&ctx, sql).await?;
     let mut task = Task::new();
 
-    let (join_node, build_plan) = df2vayu::get_hash_build_pipeline(plan.clone());
+    let uuid = 42;
+    let (join_node, build_plan) = df2vayu::get_hash_build_pipeline(plan.clone(), uuid);
+
     let build_source_pipeline = df2vayu::get_source_node(build_plan.clone());
+    let sink = vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node);
     let build_pipeline = DatafusionPipelineWithSource {
         source: build_source_pipeline,
         plan: build_plan,
-        sink: Some(vayu_common::SchedulerSinkType::BuildAndStoreHashMap(
-            1, join_node,
-        )),
+        sink: Some(sink),
     };
     task.add_pipeline(build_pipeline);
-
+    // TODO: set this uuid in probe also
     let probe_plan = plan.clone();
     let probe_source_node = df2vayu::get_source_node(probe_plan.clone());
+
     let probe_pipeline = DatafusionPipelineWithSource {
         source: probe_source_node,
         plan: probe_plan,

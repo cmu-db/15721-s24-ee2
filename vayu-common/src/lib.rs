@@ -30,13 +30,13 @@ pub enum SchedulerSinkType {
     PrintOutput,
 }
 
-pub struct DatafusionPipelineWithSource {
-    pub source: Arc<dyn ExecutionPlan>,
+pub struct DatafusionPipeline {
     pub plan: Arc<dyn ExecutionPlan>,
     pub sink: Option<SchedulerSinkType>,
+    pub id: i32,
 }
-
-pub struct DatafusionPipeline {
+pub struct DatafusionPipelineWithSource {
+    pub source: Arc<dyn ExecutionPlan>,
     pub plan: Arc<dyn ExecutionPlan>,
     pub sink: Option<SchedulerSinkType>,
 }
@@ -45,7 +45,6 @@ pub struct DatafusionPipelineWithData {
     pub pipeline: DatafusionPipeline,
     pub data: RecordBatch,
 }
-
 pub struct VayuPipeline {
     pub operators: Vec<Box<dyn IntermediateOperator>>,
     pub sink: Option<SchedulerSinkType>,

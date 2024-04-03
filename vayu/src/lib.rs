@@ -3,7 +3,6 @@ use arrow::util::pretty;
 use vayu_common::DatafusionPipelineWithData;
 use vayu_common::VayuPipeline;
 pub mod operators;
-pub mod pipeline;
 use std::sync::{Arc, Mutex};
 
 pub mod sinks;
@@ -55,7 +54,8 @@ impl VayuExecutionEngine {
         let sink = pipeline.pipeline.sink;
 
         let mut store = self.global_store.lock().unwrap();
-        let mut pipeline: VayuPipeline = df2vayu::df2vayu(pipeline.pipeline.plan, &mut store);
+        let mut pipeline: VayuPipeline =
+            df2vayu::df2vayu(pipeline.pipeline.plan, &mut store, pipeline.pipeline.id);
         drop(store);
 
         pipeline.sink = sink;

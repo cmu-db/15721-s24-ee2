@@ -16,14 +16,17 @@ impl IOService {
             uuid: 0,
         }
     }
-    pub fn submit_request(&mut self, plan: Arc<dyn ExecutionPlan>) -> i32 {
+    pub fn submit_request(&mut self, source: Arc<dyn ExecutionPlan>) -> i32 {
         let context = SessionContext::new().task_ctx();
-        let stream = plan.execute(0, context).unwrap();
+        let stream = source.execute(0, context).unwrap();
         self.stream = Some(stream);
         self.uuid = 1;
         self.uuid
     }
     pub fn poll_response(&mut self) -> Poll<(i32, RecordBatch)> {
+        if self.stream.is_none() {
+            return Poll::Pending;
+        }
         let stream = self.stream.take();
 
         let data = futures::executor::block_on(stream.unwrap().next())
