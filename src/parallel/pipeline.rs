@@ -1,4 +1,4 @@
-use crate::common::enums::operator_result_type::{OperatorResultType, SourceResultType};
+use crate::common::enums::operator_result_type::{OperatorResultType, SinkResultType, SourceResultType};
 use crate::physical_operator::{IntermediateOperator, Sink, Source};
 use datafusion::arrow::array::RecordBatch;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ impl Pipeline {
                         input: batch
                     });
                 }
-                SourceResultType::Finished(_) => {
+                SourceResultType::Finished => {
                     break;
                 }
             }
@@ -49,7 +49,11 @@ impl Pipeline {
                 let StackEntry{ index, input } = stack.pop().unwrap();
                 if index >= self.operators.len() {
                     let sink = self.sink_operator.as_mut().unwrap();
-                    sink.sink(&input);
+                    let res = sink.sink(&input);
+                    match res {
+                        SinkResultType::NeedMoreInput => {}
+                        SinkResultType::Finished => {return;}
+                    }
                 } else {
                     let op = self.operators[index].as_mut();
                     let intermediate_result = op.execute(&input);

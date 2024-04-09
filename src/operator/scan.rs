@@ -52,7 +52,7 @@ impl Source for ScanOperator {
                 return SourceResultType::HaveMoreOutput(Arc::new(batch.unwrap()));
             },
             None => {
-                return SourceResultType::Finished(Arc::new(RecordBatch::new_empty(self.schema.clone())))
+                return SourceResultType::Finished
             }
         }
     }

@@ -8,9 +8,10 @@ pub enum OperatorResultType {
 
 pub enum SourceResultType {
     HaveMoreOutput(Arc<RecordBatch>),
-    Finished(Arc<RecordBatch>),
+    Finished,
 }
 
 pub enum SinkResultType {
+    NeedMoreInput,
     Finished,
 }
