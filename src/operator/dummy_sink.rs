@@ -22,6 +22,9 @@ impl Sink for DummySinkOperator {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn finalize(&mut self) {
+    }
 }
 
 impl PhysicalOperator for DummySinkOperator {

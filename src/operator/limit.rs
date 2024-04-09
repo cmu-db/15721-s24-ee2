@@ -64,6 +64,9 @@ impl Sink for LimitOperator {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn finalize(&mut self) {
+    }
 }
 
 impl PhysicalOperator for LimitOperator {

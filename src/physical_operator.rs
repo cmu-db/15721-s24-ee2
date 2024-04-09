@@ -18,6 +18,8 @@ pub trait Sink: PhysicalOperator {
     // Sink method is called constantly with new input, as long as new input is available
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType;
     fn as_any(&self) -> &dyn Any;
+
+    fn finalize(&mut self);
 }
 
 //Operators that implement Source trait emit data

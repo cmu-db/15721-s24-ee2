@@ -94,6 +94,8 @@ impl Sink for HashJoinBuildOperator
 		self
 	}
 
+	fn finalize(&mut self) {
+	}
 }
 
 
