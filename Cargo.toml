@@ -1,5 +1,5 @@
 [workspace] 
-members = ["datafusion-integration", "lighting", "vayu"] 
+members = ["vayuDB", "vayu", "vayu-common"] 
 exclude = ["arrow-datafusion"]
 
 [package]

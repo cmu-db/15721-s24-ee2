@@ -1,14 +1,14 @@
-use crate::pipeline::{IntermediateOperator, PhysicalOperator};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::error::Result;
 use datafusion::physical_plan::joins::hash_join::{
-    create_hashes_outer, HashJoinStream, HashJoinStreamState, ProcessProbeBatchState,
+    create_hashes_outer, HashJoinStream, HashJoinStreamState, JoinLeftData, ProcessProbeBatchState,
 };
 use datafusion::physical_plan::joins::utils::StatefulStreamResult;
+use vayu_common::{IntermediateOperator, PhysicalOperator};
+
 pub struct HashProbeOperator {
     probe: HashJoinStream,
 }
-
 impl HashProbeOperator {
     pub fn new(probe: HashJoinStream) -> Self {
         Self { probe }
@@ -29,6 +29,9 @@ impl IntermediateOperator for HashProbeOperator {
             &random_state,
         )?;
         probe.hashes_buffer = hashes_buffer.clone();
+
+        // build side has already been added in df2vayu
+        // TODO: move that code in here
         probe.state = HashJoinStreamState::ProcessProbeBatch(ProcessProbeBatchState {
             batch: input.clone(),
             offset: (0, None),
