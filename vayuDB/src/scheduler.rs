@@ -1,4 +1,4 @@
-use crate::dummy_tasks::{test_filter_project, test_hash_join};
+use crate::dummy_tasks::{test_filter_project_aggregate, test_hash_join};
 use crate::tpch_tasks::test_tpchq1;
 use datafusion_benchmarks::tpch;
 use std::{hash::Hash, task::Poll};
@@ -27,7 +27,11 @@ impl Scheduler {
     }
 
     pub fn get_pipeline(&mut self, id: i32) -> Poll<vayu_common::DatafusionPipelineWithSource> {
-        let mut task = futures::executor::block_on(test_tpchq1()).unwrap();
+        // let mut task = futures::executor::block_on(test_tpchq1()).unwrap();
+        // let pipeline = task.pipelines.remove(0);
+        // return Poll::Ready(pipeline);
+
+        let mut task = futures::executor::block_on(test_filter_project_aggregate()).unwrap();
         let pipeline = task.pipelines.remove(0);
         return Poll::Ready(pipeline);
 
@@ -45,7 +49,7 @@ impl Scheduler {
             let probe_pipeline = self.probe_pipeline.take().unwrap();
             return Poll::Ready(probe_pipeline);
         } else {
-            let mut task = futures::executor::block_on(test_filter_project()).unwrap();
+            let mut task = futures::executor::block_on(test_filter_project_aggregate()).unwrap();
             let pipeline = task.pipelines.remove(0);
             return Poll::Ready(pipeline);
             // return Poll::Pending;

@@ -58,7 +58,7 @@ pub async fn test_tpchq1() -> Result<Task> {
     let common = CommonOpt {
         iterations: 1,
         partitions: Some(2),
-        batch_size: 8192,
+        batch_size: 81920,
         debug: false,
     };
     let opt = RunOpt {
@@ -76,10 +76,10 @@ pub async fn test_tpchq1() -> Result<Task> {
     let sql = queries.get(0).unwrap();
 
     let plan = get_execution_plan_from_sql(&ctx, sql).await.unwrap();
-    // println!(
-    //     "=== Physical plan ===\n{}\n",
-    //     displayable(plan.as_ref()).indent(true)
-    // );
+    println!(
+        "=== Physical plan ===\n{}\n",
+        displayable(plan.as_ref()).indent(true)
+    );
     let source = df2vayu::get_source_node(plan.clone());
     let mut task = Task::new();
 

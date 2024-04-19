@@ -12,7 +12,7 @@ use vayu::operators::join;
 use vayu_common::DatafusionPipelineWithSource;
 use vayu_common::Task;
 
-pub async fn test_filter_project() -> Result<Task> {
+pub async fn test_filter_project_aggregate() -> Result<Task> {
     // create local execution context
     let ctx: SessionContext = SessionContext::new();
     // register csv file with the execution context
@@ -23,7 +23,7 @@ pub async fn test_filter_project() -> Result<Task> {
         CsvReadOptions::new(),
     )
     .await?;
-    let sql = "SELECT c1,c3 as neg,c4 as pos,c13  FROM aggregate_test_100 WHERE (c3 < 0 AND c1='a') OR ( c4 > 0 AND c1='b' ) ";
+    let sql = "SELECT count(c1),sum(c3),sum(c4),count(c13)  FROM aggregate_test_100 WHERE (c3 < 0 AND c1='a') OR ( c4 > 0 AND c1='b' ) ";
     let plan = get_execution_plan_from_sql(&ctx, sql).await?;
     let source = df2vayu::get_source_node(plan.clone());
     let mut task = Task::new();

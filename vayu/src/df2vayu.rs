@@ -1,3 +1,4 @@
+use crate::operators::aggregate::AggregateOperator;
 use crate::operators::filter::FilterOperator;
 use crate::operators::join::HashProbeOperator;
 use crate::operators::projection::ProjectionOperator;
@@ -5,9 +6,14 @@ use crate::Store;
 use ahash::random_state::RandomSource;
 use ahash::RandomState;
 use arrow::array::BooleanBufferBuilder;
+use arrow::compute::kernels::concat_elements;
 use datafusion::datasource::physical_plan::CsvExec;
 use datafusion::datasource::physical_plan::ParquetExec;
+use datafusion::physical_plan::aggregates::AggregateExec;
+use datafusion::physical_plan::aggregates::AggregateMode;
+use datafusion::physical_plan::aggregates::StreamType;
 use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
+use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::joins::hash_join::BuildSide;
 use datafusion::physical_plan::joins::hash_join::BuildSideReadyState;
@@ -40,6 +46,18 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
             operators: vec![],
             sink: None,
         };
+    }
+    if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        let mut pipeline = df2vayu(exec.input().clone(), store, pipeline_id);
+        // check if no group by present
+        if !exec.group_by().expr().is_empty() {
+            panic!("group by present- not handled");
+        }
+
+        let tt = Box::new(AggregateOperator::new(exec));
+        println!("adding aggregate");
+        pipeline.operators.push(tt);
+        return pipeline;
     }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         let mut pipeline = df2vayu(exec.input().clone(), store, pipeline_id);
@@ -85,6 +103,9 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
         return df2vayu(exec.input().clone(), store, pipeline_id);
     }
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
+        return df2vayu(exec.input().clone(), store, pipeline_id);
+    }
+    if let Some(exec) = p.downcast_ref::<CoalescePartitionsExec>() {
         return df2vayu(exec.input().clone(), store, pipeline_id);
     }
     panic!("should never reach the end");
@@ -137,6 +158,12 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     }
     if let Some(_) = p.downcast_ref::<ParquetExec>() {
         return plan;
+    }
+    if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        return get_source_node(exec.input().clone());
+    }
+    if let Some(exec) = p.downcast_ref::<CoalescePartitionsExec>() {
+        return get_source_node(exec.input().clone());
     }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         return get_source_node(exec.input().clone());

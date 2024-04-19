@@ -31,7 +31,7 @@ impl VayuExecutionEngine {
         );
         match sink {
             vayu_common::SchedulerSinkType::PrintOutput => {
-                // pretty::print_batches(&result).unwrap();
+                pretty::print_batches(&result).unwrap();
             }
             // vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
             //     self.store.append(uuid, result);
