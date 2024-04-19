@@ -5,3 +5,4 @@ pub mod scan;
 pub mod hash_join;
 pub mod limit;
 pub mod sort;
+pub mod hash_aggregate;
