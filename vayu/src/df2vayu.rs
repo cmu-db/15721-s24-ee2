@@ -6,6 +6,7 @@ use ahash::random_state::RandomSource;
 use ahash::RandomState;
 use arrow::array::BooleanBufferBuilder;
 use datafusion::datasource::physical_plan::CsvExec;
+use datafusion::datasource::physical_plan::ParquetExec;
 use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::joins::hash_join::BuildSide;
@@ -29,6 +30,12 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
     // set batch size here
     // println!("batch size {context.se}");
     if let Some(_) = p.downcast_ref::<CsvExec>() {
+        return VayuPipeline {
+            operators: vec![],
+            sink: None,
+        };
+    }
+    if let Some(_) = p.downcast_ref::<ParquetExec>() {
         return VayuPipeline {
             operators: vec![],
             sink: None,
@@ -128,6 +135,9 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         return plan;
     }
+    if let Some(_) = p.downcast_ref::<ParquetExec>() {
+        return plan;
+    }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         return get_source_node(exec.input().clone());
     }
@@ -140,5 +150,5 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
         return get_source_node(exec.input().clone());
     }
-    panic!("No join node found");
+    panic!("No source node found");
 }

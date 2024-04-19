@@ -24,6 +24,7 @@ pub enum SchedulerSourceType {
     RecordBatchStore(i32),
 }
 
+#[derive(Clone)]
 pub enum SchedulerSinkType {
     // StoreRecordBatch(i32),
     BuildAndStoreHashMap(i32, Arc<dyn ExecutionPlan>),

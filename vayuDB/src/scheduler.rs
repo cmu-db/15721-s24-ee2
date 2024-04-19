@@ -1,4 +1,6 @@
 use crate::dummy_tasks::{test_filter_project, test_hash_join};
+use crate::tpch_tasks::test_tpchq1;
+use datafusion_benchmarks::tpch;
 use std::{hash::Hash, task::Poll};
 use vayu_common::DatafusionPipelineWithSource;
 #[derive(PartialEq)]
@@ -23,7 +25,12 @@ impl Scheduler {
             probe_pipeline: None,
         }
     }
+
     pub fn get_pipeline(&mut self, id: i32) -> Poll<vayu_common::DatafusionPipelineWithSource> {
+        let mut task = futures::executor::block_on(test_tpchq1()).unwrap();
+        let pipeline = task.pipelines.remove(0);
+        return Poll::Ready(pipeline);
+
         self.turn = 1 - self.turn;
         if self.turn == 0 && self.state == HashJoinState::CanSendBuild {
             let mut task = futures::executor::block_on(test_hash_join()).unwrap();

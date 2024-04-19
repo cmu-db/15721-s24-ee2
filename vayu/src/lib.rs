@@ -31,7 +31,7 @@ impl VayuExecutionEngine {
         );
         match sink {
             vayu_common::SchedulerSinkType::PrintOutput => {
-                pretty::print_batches(&result).unwrap();
+                // pretty::print_batches(&result).unwrap();
             }
             // vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
             //     self.store.append(uuid, result);
@@ -51,17 +51,20 @@ impl VayuExecutionEngine {
     }
     pub fn execute(&mut self, pipeline: DatafusionPipelineWithData) {
         let data = pipeline.data;
-        let sink = pipeline.pipeline.sink;
+
+        let pipeline = pipeline.pipeline;
+
+        let sink = pipeline.sink;
 
         let mut store = self.global_store.lock().unwrap();
-        let mut pipeline: VayuPipeline =
-            df2vayu::df2vayu(pipeline.pipeline.plan, &mut store, pipeline.pipeline.id);
+        let mut pipeline: VayuPipeline = df2vayu::df2vayu(pipeline.plan, &mut store, pipeline.id);
         drop(store);
 
         pipeline.sink = sink;
 
         self.execute_internal(pipeline, data);
     }
+
     pub fn execute_internal(&mut self, mut pipeline: VayuPipeline, mut data: RecordBatch) {
         println!("operators size {}", pipeline.operators.len());
         for x in &mut pipeline.operators {

@@ -5,6 +5,7 @@ use datafusion::physical_plan::joins::HashJoinExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::CsvReadOptions;
 use datafusion::prelude::SessionContext;
+use std::path::Path;
 use std::sync::Arc;
 use vayu::df2vayu;
 use vayu::operators::join;
@@ -88,9 +89,13 @@ pub async fn get_execution_plan_from_sql(
     sql: &str,
 ) -> Result<Arc<dyn ExecutionPlan>> {
     // create datafusion logical plan
-    let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql).await?;
+    let logical_plan = SessionState::create_logical_plan(&ctx.state(), sql)
+        .await
+        .unwrap();
     // create datafusion physical plan
-    let plan = SessionState::create_physical_plan(&ctx.state(), &logical_plan).await?;
+    let plan = SessionState::create_physical_plan(&ctx.state(), &logical_plan)
+        .await
+        .unwrap();
     // print datafusion physical plan
     // println!(
     //     "Detailed physical plan:\n{}",

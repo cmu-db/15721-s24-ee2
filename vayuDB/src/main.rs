@@ -6,6 +6,7 @@ use vayu_common::{DatafusionPipeline, DatafusionPipelineWithData};
 mod dummy_tasks;
 mod io_service;
 mod scheduler;
+mod tpch_tasks;
 use std::collections::LinkedList;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -24,6 +25,7 @@ fn start_worker(
         let pipeline_id = pipeline.pipeline.id;
         println!("{thread_id}:got a pipeline for the thread, executing ...");
         executor.execute(pipeline);
+        println!("{thread_id}:done executing ...");
         sender.send((thread_id, pipeline_id)).unwrap();
     }
 }
@@ -86,7 +88,8 @@ fn main() {
     // but we will poll some extra pipelines from the scheduler and send it to the io service
     // so that we can start working on it once any worker is free
     let mut next_id = 0;
-    loop {
+
+    if request_pipeline_map.len() == 0 {
         // poll scheduler for a new task
         let pipeline = scheduler.get_pipeline(next_id);
         if let Poll::Ready(pipeline) = pipeline {
@@ -108,8 +111,10 @@ fn main() {
             );
             next_id += 1;
         }
-
+    }
+    loop {
         if let Ok((thread_id, finished_pipeline_id)) = informer_receiver.try_recv() {
+            println!("got ack from thread {}", thread_id);
             if finished_pipeline_id != -1 {
                 scheduler.ack_pipeline(finished_pipeline_id);
             }
@@ -117,23 +122,34 @@ fn main() {
             free_threads.push_back(thread_id);
         }
         if let Some(&thread_id) = free_threads.front() {
+            // println!("free thread available");
             // poll io_service for a response
             let response = io_service.poll_response();
             if let Poll::Ready((request_num, data)) = response {
-                free_threads.pop_front();
-                println!("got a response from the io_service");
+                if data.is_none() {
+                    let pipeline = request_pipeline_map.remove(&request_num);
+                } else {
+                    let data = data.unwrap();
+                    free_threads.pop_front();
+                    println!("got a response from the io_service");
 
-                // TODO: handle when a source gives multiple record batches
-                // get the pipeline from the local map
-                let pipeline = request_pipeline_map.remove(&request_num);
-                assert!(pipeline.is_some());
-                let pipeline = pipeline.unwrap();
+                    // TODO: handle when a source gives multiple record batches
+                    // get the pipeline from the local map
+                    let pipeline = request_pipeline_map.remove(&request_num);
 
-                // send over channel
-                let msg = DatafusionPipelineWithData { pipeline, data };
-                senders[thread_id].send(msg).expect("Failed to send struct");
-                println!("sent the pipeline and the data to the worker");
-
+                    assert!(pipeline.is_some());
+                    let pipeline = pipeline.unwrap();
+                    let pipeline2 = DatafusionPipeline {
+                        plan: pipeline.plan.clone(),
+                        sink: pipeline.sink.clone(),
+                        id: pipeline.id,
+                    };
+                    request_pipeline_map.insert(request_num, pipeline2);
+                    // send over channel
+                    let msg = DatafusionPipelineWithData { pipeline, data };
+                    senders[thread_id].send(msg).expect("Failed to send struct");
+                    println!("sent the pipeline and the data to the worker");
+                }
                 // assign the next pipeline to some other worker
                 // worker_id = round_robin(worker_id, num_threads);
             }
