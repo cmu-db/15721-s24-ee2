@@ -3,7 +3,6 @@ use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
 use datafusion::logical_expr::{col,lit};
 use datafusion::physical_expr::create_physical_expr;
-use ee2::operator::dummy_sink::DummySinkOperator;
 use ee2::operator::hash_join::{HashJoinBuildOperator, HashJoinProbeOperator, JoinLeftData};
 use ee2::operator::filter::FilterOperator;
 use ee2::operator::scan::ScanOperator;
@@ -12,7 +11,7 @@ use ee2::physical_operator::{IntermediateOperator, Sink, Source};
 use std::sync::Arc;
 use datafusion::arrow::compute;
 use datafusion::arrow::util::pretty;
-use ee2::operator::limit::{LimitOperator, LimitOperatorData};
+use ee2::operator::limit::{LimitOperator};
 
 fn main() {
     //define schema of table to read 

@@ -3,6 +3,7 @@ use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::{RecordBatch};
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 
 //LimitOperatorData holds the RecordBatches sinked in LimitOperator
@@ -74,11 +75,7 @@ impl PhysicalOperator for LimitOperator {
         todo!()
     }
 
-    fn is_sink(&self) -> bool {
-        true
-    }
-
-    fn is_source(&self) -> bool {
-        false
+    fn get_type(&self) -> PhysicalOperatorType{
+        PhysicalOperatorType::Limit
     }
 }

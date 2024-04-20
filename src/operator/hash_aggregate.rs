@@ -8,6 +8,7 @@ use std::sync::Arc;
 use datafusion::arrow::compute;
 use datafusion::physical_expr::{AggregateExpr, PhysicalExpr};
 use datafusion::arrow::array::Array;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 pub struct AggregatedData{
     pub data : Option<RecordBatch>,
@@ -160,11 +161,7 @@ impl PhysicalOperator for HashAggregateOperator {
         todo!()
     }
 
-    fn is_sink(&self) -> bool {
-        true
-    }
-
-    fn is_source(&self) -> bool {
-        false
+    fn get_type(&self) -> PhysicalOperatorType {
+        PhysicalOperatorType::HashAggregate
     }
 }

@@ -1,12 +1,13 @@
-use crate::common::enums::operator_result_type::{SinkResultType, SourceResultType};
-use crate::physical_operator::{PhysicalOperator, Sink, Source};
+use crate::common::enums::operator_result_type::{SinkResultType};
+use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::{RecordBatch};
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
 use datafusion::arrow::compute;
 use datafusion::arrow::compute::lexsort_to_indices;
-use datafusion::physical_expr::{PhysicalExpr, PhysicalSortExpr};
+use datafusion::physical_expr::{PhysicalSortExpr};
 use datafusion::arrow::compute::take;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 
 pub struct SortedData{
@@ -63,12 +64,7 @@ impl PhysicalOperator for SortOperator {
     fn schema(&self) -> Arc<Schema> {
         todo!()
     }
-
-    fn is_sink(&self) -> bool {
-        true
-    }
-
-    fn is_source(&self) -> bool {
-        false
+    fn get_type(&self) -> PhysicalOperatorType {
+       PhysicalOperatorType::Sort
     }
 }

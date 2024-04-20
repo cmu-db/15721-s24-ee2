@@ -12,6 +12,7 @@ use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink};
 use std::hash::Hasher;
 use std::collections::hash_map::DefaultHasher;
 use datafusion::arrow::compute;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 pub struct JoinLeftData{
 	pub hash_table : HashMap<u64,Vec<u64>>,
@@ -47,12 +48,8 @@ impl PhysicalOperator for HashJoinBuildOperator
 		Arc::clone(&self.schema)
 	}
 
-	fn is_sink(&self) -> bool{
-		true
-	}
-
-	fn is_source (&self ) -> bool{
-		false
+	fn get_type(&self) -> PhysicalOperatorType {
+	PhysicalOperatorType::HashJoinBuild
 	}
 }
 
@@ -190,11 +187,7 @@ impl PhysicalOperator for HashJoinProbeOperator{
 		Arc::clone(&self.schema)
 	}
 
-	fn is_sink(&self) -> bool{
-		false
-	}
-
-	fn is_source (&self ) -> bool{
-		true
+	fn get_type(&self) -> PhysicalOperatorType {
+		PhysicalOperatorType::HashJoinProbe
 	}
 }

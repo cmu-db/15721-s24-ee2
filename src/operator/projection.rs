@@ -4,6 +4,8 @@ use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::physical_plan::PhysicalExpr;
 use std::sync::Arc;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+
 pub struct ProjectionOperator {
     expr: Vec<(Arc<dyn PhysicalExpr>, String)>,
     pub output_schema: Schema
@@ -47,11 +49,7 @@ impl PhysicalOperator for ProjectionOperator {
         todo!()
     }
 
-    fn is_sink(&self) -> bool {
-        false
-    }
-
-    fn is_source(&self) -> bool {
-        false
+    fn get_type(&self) -> PhysicalOperatorType {
+       PhysicalOperatorType::Projection
     }
 }

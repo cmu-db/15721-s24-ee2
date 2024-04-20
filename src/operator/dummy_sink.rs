@@ -4,6 +4,7 @@ use datafusion::arrow::array::{RecordBatch};
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
 use datafusion::common::arrow::util::pretty;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 pub struct DummySinkOperator;
 
@@ -32,11 +33,7 @@ impl PhysicalOperator for DummySinkOperator {
         todo!()
     }
 
-    fn is_source(&self) -> bool {
-        false
-    }
-
-    fn is_sink(&self) -> bool {
-        true
+    fn get_type(&self) -> PhysicalOperatorType {
+       todo!()
     }
 }

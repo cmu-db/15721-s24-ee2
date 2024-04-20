@@ -5,6 +5,7 @@ use datafusion::arrow::compute::filter_record_batch;
 use datafusion::arrow::datatypes::Schema;
 use std::sync::Arc;
 use datafusion::physical_expr::PhysicalExpr;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 pub struct FilterOperator {
     expression : Arc<dyn PhysicalExpr>,
@@ -33,11 +34,7 @@ impl PhysicalOperator for FilterOperator {
         todo!()
     }
 
-    fn is_sink(&self) -> bool {
-        false
-    }
-
-    fn is_source(&self) -> bool {
-        false
+    fn get_type(&self) -> PhysicalOperatorType {
+        PhysicalOperatorType::Filter
     }
 }

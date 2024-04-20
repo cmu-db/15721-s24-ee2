@@ -1,11 +1,11 @@
 use crate::common::enums::operator_result_type::SourceResultType;
 use crate::physical_operator::{PhysicalOperator, Source};
-use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::csv::{Reader, ReaderBuilder};
 use datafusion::arrow::datatypes::Schema;
 use datafusion::parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
 use std::fs::File;
 use std::sync::Arc;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 enum ScanReader {
     Parquet(ParquetRecordBatchReader),
@@ -62,11 +62,7 @@ impl PhysicalOperator for ScanOperator {
     fn schema(&self) -> Arc<Schema> {
         Arc::clone(&self.schema)
     }
-    fn is_sink(&self) -> bool {
-        false
-    }
-
-    fn is_source(&self) -> bool {
-        true
+    fn get_type(&self) -> PhysicalOperatorType {
+       PhysicalOperatorType::Scan
     }
 }

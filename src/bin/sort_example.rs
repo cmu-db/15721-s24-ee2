@@ -11,7 +11,6 @@ use ee2::physical_operator::{IntermediateOperator, Sink, Source};
 use std::sync::Arc;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::util::pretty;
-use datafusion::prelude::exp;
 use ee2::operator::sort::SortOperator;
 
 fn main() {
