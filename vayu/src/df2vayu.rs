@@ -179,3 +179,17 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     }
     panic!("No source node found");
 }
+
+pub fn aggregate(exec: Arc<dyn ExecutionPlan>) -> AggregateOperator {
+    let p = exec.as_any();
+    let final_aggregate = if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        if !exec.group_by().expr().is_empty() {
+            panic!("group by present- not handled");
+        }
+        let tt = AggregateOperator::new(exec);
+        tt
+    } else {
+        panic!("not an aggregate");
+    };
+    final_aggregate
+}

@@ -1,16 +1,18 @@
 use arrow::array::RecordBatch;
 use arrow::util::pretty;
 use vayu_common::DatafusionPipelineWithData;
+use vayu_common::IntermediateOperator;
 use vayu_common::VayuPipeline;
 pub mod operators;
+use crate::operators::aggregate::AggregateOperator;
+use datafusion::physical_plan::coalesce_batches::concat_batches;
 use std::sync::{Arc, Mutex};
-
 pub mod sinks;
 use vayu_common::store::Store;
 pub mod df2vayu;
 pub struct VayuExecutionEngine {
     // this is per node store
-    pub store: Store,
+    // pub store: Store,
     // this is global store
     pub global_store: Arc<Mutex<Store>>,
     // Note: only one of them will survive lets see which
@@ -19,8 +21,38 @@ pub struct VayuExecutionEngine {
 impl VayuExecutionEngine {
     pub fn new(global_store: Arc<Mutex<Store>>) -> VayuExecutionEngine {
         VayuExecutionEngine {
-            store: Store::new(),
+            //    store: Store::new(),
             global_store,
+        }
+    }
+    pub fn finalize(&mut self, sink: vayu_common::FinalizeSinkType) {
+        println!("running finalize");
+
+        match sink {
+            vayu_common::FinalizeSinkType::PrintFromStore(uuid) => {
+                println!("running print from store {uuid}");
+                let mut store = self.global_store.lock().unwrap();
+                let blob = store.remove(uuid);
+                println!("{:?}", store.store.keys());
+
+                drop(store);
+                let result = blob.unwrap().get_records();
+                pretty::print_batches(&result).unwrap();
+            }
+            vayu_common::FinalizeSinkType::FinalAggregate(plan, uuid) => {
+                println!("running FinalAggregate from store {uuid}");
+                let mut store = self.global_store.lock().unwrap();
+                let blob = store.remove(uuid);
+                println!("{:?}", store.store.keys());
+
+                drop(store);
+                let result = blob.unwrap().get_records();
+                let mut operator = df2vayu::aggregate(plan);
+                let batch = arrow::compute::concat_batches(&result[0].schema(), &result).unwrap();
+
+                let result = operator.execute(&batch).unwrap();
+                pretty::print_batches(&[result.clone()]).unwrap();
+            }
         }
     }
     pub fn sink(&mut self, sink: vayu_common::SchedulerSinkType, result: Vec<RecordBatch>) {
@@ -33,17 +65,18 @@ impl VayuExecutionEngine {
             vayu_common::SchedulerSinkType::PrintOutput => {
                 pretty::print_batches(&result).unwrap();
             }
-            // vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
-            //     self.store.append(uuid, result);
-            // }
+            vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
+                println!("storing at store {uuid}");
+                let mut store = self.global_store.lock().unwrap();
+                store.append(uuid, result);
+
+                println!("{:?}", store.store.keys());
+                drop(store);
+            }
             vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
                 let mut sink = sinks::HashMapSink::new(uuid, join_node);
                 let hashmap = sink.build_map(result);
                 println!("BuildAndStoreHashMap storing in uuid {uuid}");
-
-                // old store
-                // self.store.insert(uuid, hashmap.unwrap());
-                // new store
                 let mut map = self.global_store.lock().unwrap();
                 map.insert(uuid, hashmap.unwrap());
             }

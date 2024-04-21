@@ -48,7 +48,7 @@ Scheduler will keep on sending the tasks.
 
 ## Common Vayu Structures 
 ```
-pub struct DatafusionPipelineWithSource {
+pub struct SchedulerPipeline {
     pub source: Arc<dyn ExecutionPlan>,
     pub plan: Arc<dyn ExecutionPlan>,
     pub sink: SchedulerSinkType,
@@ -60,7 +60,7 @@ pub struct DatafusionPipelineWithSource {
 1. Scheduler
 ```
 pub fn new() -> Self
-pub fn get_pipeline(&mut self) -> Poll<vayu_common::DatafusionPipelineWithSource> 
+pub fn get_pipeline(&mut self) -> Poll<vayu_common::SchedulerPipeline> 
 pub fn ack_pipeline(&mut self, pipeline_id: i32);
 ```
 

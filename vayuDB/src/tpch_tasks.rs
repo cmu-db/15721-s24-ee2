@@ -11,7 +11,10 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::exit;
 use vayu::df2vayu;
-use vayu_common::DatafusionPipelineWithSource;
+use vayu::operators::aggregate::AggregateOperator;
+use vayu_common::DatafusionPipeline;
+use vayu_common::SchedulerPipeline;
+use vayu_common::SchedulerSinkType;
 use vayu_common::Task;
 fn get_tpch_data_path() -> Result<String> {
     let path = std::env::var("TPCH_DATA").unwrap_or_else(|_| "benchmarks/data".to_string());
@@ -76,18 +79,31 @@ pub async fn test_tpchq1() -> Result<Task> {
     let sql = queries.get(0).unwrap();
 
     let plan = get_execution_plan_from_sql(&ctx, sql).await.unwrap();
+    let final_aggregate = plan.clone();
+    // let final_aggregate = AggregateOperator::new(final_aggregate);
+
+    let plan = plan.children().get(0).unwrap().clone();
     println!(
         "=== Physical plan ===\n{}\n",
         displayable(plan.as_ref()).indent(true)
     );
-    let source = df2vayu::get_source_node(plan.clone());
+    let source = Some(df2vayu::get_source_node(plan.clone()));
     let mut task = Task::new();
 
-    let pipeline = DatafusionPipelineWithSource {
-        source,
+    let uuid = 55;
+    let pipeline = DatafusionPipeline {
         plan,
-        sink: Some(vayu_common::SchedulerSinkType::PrintOutput),
+        sink: Some(SchedulerSinkType::StoreRecordBatch(uuid)),
+        id: 1,
     };
+
+    let finalize = vayu_common::FinalizeSinkType::FinalAggregate(final_aggregate, uuid);
+    let pipeline = SchedulerPipeline {
+        source,
+        pipeline,
+        finalize,
+    };
+
     task.add_pipeline(pipeline);
 
     return Ok(task);
