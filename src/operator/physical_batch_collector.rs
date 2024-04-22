@@ -6,17 +6,27 @@ use datafusion::arrow::datatypes::Schema;
 use datafusion::common::arrow::util::pretty;
 use std::sync::Arc;
 
-pub struct DummySinkOperator;
+pub struct PhysicalBatchCollector{
+    result : Vec<RecordBatch>,
+}
 
-impl DummySinkOperator {
+impl PhysicalBatchCollector {
     pub fn new() -> Self {
-        DummySinkOperator {}
+        PhysicalBatchCollector {
+            result : vec![],
+        }
+    }
+
+    pub fn print(&self){
+        for batch in &self.result{
+            pretty::print_batches(std::slice::from_ref(batch)).unwrap();
+        }
     }
 }
 
-impl Sink for DummySinkOperator {
+impl Sink for PhysicalBatchCollector {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
-        pretty::print_batches(std::slice::from_ref(input.as_ref())).unwrap();
+        self.result.push(input.as_ref().clone());
         SinkResultType::NeedMoreInput
     }
 
@@ -27,7 +37,7 @@ impl Sink for DummySinkOperator {
     fn finalize(&mut self) {}
 }
 
-impl PhysicalOperator for DummySinkOperator {
+impl PhysicalOperator for PhysicalBatchCollector {
     fn schema(&self) -> Arc<Schema> {
         todo!()
     }

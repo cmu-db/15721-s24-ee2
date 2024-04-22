@@ -3,7 +3,7 @@ use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
 use datafusion::logical_expr::{col, lit};
 use datafusion::physical_expr::create_physical_expr;
-use ee2::operator::dummy_sink::DummySinkOperator;
+use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use ee2::operator::filter::FilterOperator;
 use ee2::operator::projection::ProjectionOperator;
 use ee2::operator::scan::ScanOperator;
@@ -45,7 +45,7 @@ fn main() {
 
     let filter = Box::new(FilterOperator::new(physical_expr));
 
-    let sink: Option<Box<dyn Sink>> = Some(Box::new(DummySinkOperator::new()));
+    let sink: Option<Box<dyn Sink>> = Some(Box::new(PhysicalBatchCollector::new()));
 
     let mut pipeline = Pipeline::new();
     pipeline.source_operator = scan;

@@ -1,4 +1,4 @@
-pub mod dummy_sink;
+pub mod physical_batch_collector;
 pub mod filter;
 pub mod hash_aggregate;
 pub mod hash_join;

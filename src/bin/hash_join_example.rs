@@ -3,7 +3,7 @@ use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
 use datafusion::logical_expr::{col, lit};
 use datafusion::physical_expr::create_physical_expr;
-use ee2::operator::dummy_sink::DummySinkOperator;
+use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use ee2::operator::filter::FilterOperator;
 use ee2::operator::hash_join::{HashJoinBuildOperator, HashJoinProbeOperator, JoinLeftData};
 use ee2::operator::scan::ScanOperator;
@@ -104,7 +104,7 @@ fn main() {
         Box::new(HashJoinProbeOperator::new(v, Arc::new(schema), build_data));
 
     //create dummy sink printing operator
-    let sink: Option<Box<dyn Sink>> = Some(Box::new(DummySinkOperator::new()));
+    let sink: Option<Box<dyn Sink>> = Some(Box::new(PhysicalBatchCollector::new()));
 
     //create the second pipeline
     // Source -> Scan

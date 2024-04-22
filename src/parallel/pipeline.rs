@@ -78,7 +78,7 @@ impl Pipeline {
                     }
                 }
             }
-            self.sink_operator.as_mut().unwrap().finalize();
         }
+        self.sink_operator.as_mut().unwrap().finalize();
     }
 }
