@@ -34,12 +34,12 @@ impl HashMapSink {
         }
     }
     pub fn build_map(&mut self, result: Vec<RecordBatch>) -> Option<Blob> {
-        let random_state = RandomState::with_seeds(0, 0, 0, 0);
+        let random_state: RandomState = RandomState::with_seeds(0, 0, 0, 0);
         let ctx: SessionContext = SessionContext::new();
         let reservation =
             MemoryConsumer::new("HashJoinInput").register(ctx.task_ctx().memory_pool());
 
-        let hash_map = hash_join::create_hash_build_map(
+        let hash_map: hash_join::JoinLeftData = hash_join::create_hash_build_map(
             result,
             random_state,
             self.on_left.clone(),

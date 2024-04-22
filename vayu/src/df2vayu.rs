@@ -1,3 +1,5 @@
+use crate::dummy;
+use crate::operators::aggregate::AggregateOperator;
 use crate::operators::filter::FilterOperator;
 use crate::operators::join::HashProbeOperator;
 use crate::operators::projection::ProjectionOperator;
@@ -5,8 +7,14 @@ use crate::Store;
 use ahash::random_state::RandomSource;
 use ahash::RandomState;
 use arrow::array::BooleanBufferBuilder;
+use arrow::compute::kernels::concat_elements;
 use datafusion::datasource::physical_plan::CsvExec;
+use datafusion::datasource::physical_plan::ParquetExec;
+use datafusion::physical_plan::aggregates::AggregateExec;
+use datafusion::physical_plan::aggregates::AggregateMode;
+use datafusion::physical_plan::aggregates::StreamType;
 use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
+use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::joins::hash_join::BuildSide;
 use datafusion::physical_plan::joins::hash_join::BuildSideReadyState;
@@ -20,7 +28,9 @@ use std::sync::Arc;
 use vayu_common::VayuPipeline;
 
 pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32) -> VayuPipeline {
+    let plan2 = plan.clone();
     let p = plan.as_any();
+
     let batch_size = 1024;
     let config = SessionConfig::new().with_batch_size(batch_size);
     let ctx = Arc::new(SessionContext::new_with_config(config));
@@ -33,6 +43,24 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
             operators: vec![],
             sink: None,
         };
+    }
+    if let Some(_) = p.downcast_ref::<ParquetExec>() {
+        return VayuPipeline {
+            operators: vec![],
+            sink: None,
+        };
+    }
+    if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        let mut pipeline = df2vayu(exec.input().clone(), store, pipeline_id);
+        // check if no group by present
+        if !exec.group_by().expr().is_empty() {
+            panic!("group by present- not handled");
+        }
+
+        let tt = Box::new(AggregateOperator::new(exec));
+        println!("adding aggregate");
+        pipeline.operators.push(tt);
+        return pipeline;
     }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         let mut pipeline = df2vayu(exec.input().clone(), store, pipeline_id);
@@ -51,25 +79,53 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
         return pipeline;
     }
     if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
+        let mut exec2 = exec.clone();
         // this function will only be called for probe side
         // build side wont have hashjoinexec in make_pipeline call
 
         // let dummy = exec.left().execute(0, context.clone());
         let mut pipeline = df2vayu(exec.right().clone(), store, pipeline_id);
         println!("adding hashprobe");
-
-        let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
-        println!("got joinstream");
-
+        let tt = dummy::DummyExec::new(
+            exec.properties().clone(),
+            exec.statistics().unwrap(),
+            exec.left().schema(),
+        );
+        let tt2 = dummy::DummyExec::new(
+            exec.properties().clone(),
+            exec.statistics().unwrap(),
+            exec.right().schema(),
+        );
+        let x = plan2
+            .with_new_children(vec![Arc::new(tt), Arc::new(tt2)])
+            .unwrap();
+        let x1 = x.as_any();
+        let exec = if let Some(exec) = x1.downcast_ref::<HashJoinExec>() {
+            exec
+        } else {
+            panic!("wrongg");
+        };
         // using uuid but this value would be present in HashProbeExec itself
         // TODO: remove from the correct key
-        let build_map = store.remove(42).unwrap();
-        let left_data = Arc::new(build_map.get_map());
+        println!("{:?}", store.store.keys());
+        let mut build_map = store.remove(42).unwrap();
+        let mut cmap = build_map.clone();
+        store.append(42, cmap);
+        let map = build_map.remove(0);
+        let build_map = match map {
+            vayu_common::store::Blob::HashMapBlob(map) => map,
+            _ => panic!("what nooo"),
+        };
+        let c = build_map.clone();
+        let left_data = Arc::new(build_map);
         let visited_left_side = BooleanBufferBuilder::new(0);
+
+        let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
         hashjoinstream.build_side = BuildSide::Ready(BuildSideReadyState {
             left_data,
             visited_left_side,
         });
+        println!("got joinstream");
         let tt = Box::new(HashProbeOperator::new(hashjoinstream));
         pipeline.operators.push(tt);
         return pipeline;
@@ -78,6 +134,9 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
         return df2vayu(exec.input().clone(), store, pipeline_id);
     }
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
+        return df2vayu(exec.input().clone(), store, pipeline_id);
+    }
+    if let Some(exec) = p.downcast_ref::<CoalescePartitionsExec>() {
         return df2vayu(exec.input().clone(), store, pipeline_id);
     }
     panic!("should never reach the end");
@@ -128,6 +187,15 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     if let Some(_) = p.downcast_ref::<CsvExec>() {
         return plan;
     }
+    if let Some(_) = p.downcast_ref::<ParquetExec>() {
+        return plan;
+    }
+    if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        return get_source_node(exec.input().clone());
+    }
+    if let Some(exec) = p.downcast_ref::<CoalescePartitionsExec>() {
+        return get_source_node(exec.input().clone());
+    }
     if let Some(exec) = p.downcast_ref::<FilterExec>() {
         return get_source_node(exec.input().clone());
     }
@@ -140,5 +208,19 @@ pub fn get_source_node(plan: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {
     if let Some(exec) = p.downcast_ref::<CoalesceBatchesExec>() {
         return get_source_node(exec.input().clone());
     }
-    panic!("No join node found");
+    panic!("No source node found");
+}
+
+pub fn aggregate(exec: Arc<dyn ExecutionPlan>) -> AggregateOperator {
+    let p = exec.as_any();
+    let final_aggregate = if let Some(exec) = p.downcast_ref::<AggregateExec>() {
+        if !exec.group_by().expr().is_empty() {
+            panic!("group by present- not handled");
+        }
+        let tt = AggregateOperator::new(exec);
+        tt
+    } else {
+        panic!("not an aggregate");
+    };
+    final_aggregate
 }
