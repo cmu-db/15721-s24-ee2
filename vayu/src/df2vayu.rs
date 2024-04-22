@@ -1,3 +1,4 @@
+use crate::dummy;
 use crate::operators::aggregate::AggregateOperator;
 use crate::operators::filter::FilterOperator;
 use crate::operators::join::HashProbeOperator;
@@ -27,7 +28,9 @@ use std::sync::Arc;
 use vayu_common::VayuPipeline;
 
 pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32) -> VayuPipeline {
+    let plan2 = plan.clone();
     let p = plan.as_any();
+
     let batch_size = 1024;
     let config = SessionConfig::new().with_batch_size(batch_size);
     let ctx = Arc::new(SessionContext::new_with_config(config));
@@ -76,25 +79,53 @@ pub fn df2vayu(plan: Arc<dyn ExecutionPlan>, store: &mut Store, pipeline_id: i32
         return pipeline;
     }
     if let Some(exec) = p.downcast_ref::<HashJoinExec>() {
+        let mut exec2 = exec.clone();
         // this function will only be called for probe side
         // build side wont have hashjoinexec in make_pipeline call
 
         // let dummy = exec.left().execute(0, context.clone());
         let mut pipeline = df2vayu(exec.right().clone(), store, pipeline_id);
         println!("adding hashprobe");
-
-        let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
-        println!("got joinstream");
-
+        let tt = dummy::DummyExec::new(
+            exec.properties().clone(),
+            exec.statistics().unwrap(),
+            exec.left().schema(),
+        );
+        let tt2 = dummy::DummyExec::new(
+            exec.properties().clone(),
+            exec.statistics().unwrap(),
+            exec.right().schema(),
+        );
+        let x = plan2
+            .with_new_children(vec![Arc::new(tt), Arc::new(tt2)])
+            .unwrap();
+        let x1 = x.as_any();
+        let exec = if let Some(exec) = x1.downcast_ref::<HashJoinExec>() {
+            exec
+        } else {
+            panic!("wrongg");
+        };
         // using uuid but this value would be present in HashProbeExec itself
         // TODO: remove from the correct key
-        let build_map = store.remove(42).unwrap();
-        let left_data = Arc::new(build_map.get_map());
+        println!("{:?}", store.store.keys());
+        let mut build_map = store.remove(42).unwrap();
+        let mut cmap = build_map.clone();
+        store.append(42, cmap);
+        let map = build_map.remove(0);
+        let build_map = match map {
+            vayu_common::store::Blob::HashMapBlob(map) => map,
+            _ => panic!("what nooo"),
+        };
+        let c = build_map.clone();
+        let left_data = Arc::new(build_map);
         let visited_left_side = BooleanBufferBuilder::new(0);
+
+        let mut hashjoinstream = exec.get_hash_join_stream(0, context).unwrap();
         hashjoinstream.build_side = BuildSide::Ready(BuildSideReadyState {
             left_data,
             visited_left_side,
         });
+        println!("got joinstream");
         let tt = Box::new(HashProbeOperator::new(hashjoinstream));
         pipeline.operators.push(tt);
         return pipeline;

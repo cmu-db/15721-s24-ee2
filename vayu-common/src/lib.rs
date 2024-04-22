@@ -30,7 +30,6 @@ pub enum SchedulerSourceType {
 pub enum SchedulerSinkType {
     StoreRecordBatch(i32),
     // FinalAggregation(i32, AggregateOperator),
-    BuildAndStoreHashMap(i32, Arc<dyn ExecutionPlan>),
     PrintOutput,
 }
 
@@ -38,6 +37,7 @@ pub enum SchedulerSinkType {
 pub enum FinalizeSinkType {
     PrintFromStore(i32),
     FinalAggregate(Arc<dyn ExecutionPlan>, i32),
+    BuildAndStoreHashMap(i32, Arc<dyn ExecutionPlan>),
 }
 #[derive(Clone)]
 pub struct DatafusionPipeline {

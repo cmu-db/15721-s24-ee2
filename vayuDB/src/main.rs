@@ -138,6 +138,21 @@ fn main() {
                     }
                     None => {
                         println!("inform scheduler we are done");
+                        // let pipeline = scheduler.get_pipeline(next_id);
+                        // if let Poll::Ready(mut pipeline) = pipeline {
+                        //     // TODO: add support for multiple dependent pipeline
+                        //     println!("got a pipeline from scheduler");
+
+                        //     let source = pipeline.source.take().unwrap();
+                        //     // submit the source request to io service
+                        //     let request_num = io_service.submit_request(source);
+                        //     println!("sent the request to the io_service");
+
+                        //     // insert the pipeline into the local map
+                        //     request_pipeline_map.insert(request_num, (pipeline, 0));
+                        //     next_id += 1;
+                        // }
+
                         // scheduler.ack_pipeline(request_num);
                     }
                 }

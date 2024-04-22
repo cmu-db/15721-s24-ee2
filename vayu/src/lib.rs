@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 pub mod sinks;
 use vayu_common::store::Store;
 pub mod df2vayu;
+mod dummy;
 pub struct VayuExecutionEngine {
     // this is per node store
     // pub store: Store,
@@ -18,6 +19,27 @@ pub struct VayuExecutionEngine {
     // Note: only one of them will survive lets see which
 }
 
+fn get_batches_from_record_batch_blob(vblob: Vec<vayu_common::store::Blob>) -> Vec<RecordBatch> {
+    let mut batches = vec![];
+    for val in vblob {
+        match val {
+            vayu_common::store::Blob::RecordBatchBlob(batch) => {
+                batches.push(batch);
+            }
+            vayu_common::store::Blob::HashMapBlob(_) => {
+                panic!("not done")
+            }
+        }
+    }
+    batches
+}
+fn get_record_batch_blob_from_batches(batch: Vec<RecordBatch>) -> Vec<vayu_common::store::Blob> {
+    let mut vblob = vec![];
+    for val in batch {
+        vblob.push(vayu_common::store::Blob::RecordBatchBlob(val));
+    }
+    vblob
+}
 impl VayuExecutionEngine {
     pub fn new(global_store: Arc<Mutex<Store>>) -> VayuExecutionEngine {
         VayuExecutionEngine {
@@ -32,26 +54,47 @@ impl VayuExecutionEngine {
             vayu_common::FinalizeSinkType::PrintFromStore(uuid) => {
                 println!("running print from store {uuid}");
                 let mut store = self.global_store.lock().unwrap();
-                let blob = store.remove(uuid);
                 println!("{:?}", store.store.keys());
 
+                let blob = store.remove(uuid);
+
                 drop(store);
-                let result = blob.unwrap().get_records();
-                pretty::print_batches(&result).unwrap();
+                let result = blob.unwrap();
+                let batches = get_batches_from_record_batch_blob(result);
+                // pretty::print_batches(&batches).unwrap();
             }
             vayu_common::FinalizeSinkType::FinalAggregate(plan, uuid) => {
                 println!("running FinalAggregate from store {uuid}");
                 let mut store = self.global_store.lock().unwrap();
-                let blob = store.remove(uuid);
                 println!("{:?}", store.store.keys());
 
+                let blob = store.remove(uuid);
+
                 drop(store);
-                let result = blob.unwrap().get_records();
+                let result = blob.unwrap();
+                let batches = get_batches_from_record_batch_blob(result);
+
                 let mut operator = df2vayu::aggregate(plan);
-                let batch = arrow::compute::concat_batches(&result[0].schema(), &result).unwrap();
+                let batch = arrow::compute::concat_batches(&batches[0].schema(), &batches).unwrap();
 
                 let result = operator.execute(&batch).unwrap();
                 pretty::print_batches(&[result.clone()]).unwrap();
+            }
+            vayu_common::FinalizeSinkType::BuildAndStoreHashMap(uuid, join_node) => {
+                let mut sink = sinks::HashMapSink::new(uuid, join_node);
+
+                let mut store = self.global_store.lock().unwrap();
+                println!("{:?}", store.store.keys());
+
+                let blob = store.remove(uuid).unwrap();
+                drop(store);
+                let batches = get_batches_from_record_batch_blob(blob);
+
+                let hashmap = sink.build_map(batches);
+                let mut store = self.global_store.lock().unwrap();
+                store.insert(uuid, hashmap.unwrap());
+                drop(store);
+                println!("storing the map {uuid}");
             }
         }
     }
@@ -68,17 +111,11 @@ impl VayuExecutionEngine {
             vayu_common::SchedulerSinkType::StoreRecordBatch(uuid) => {
                 println!("storing at store {uuid}");
                 let mut store = self.global_store.lock().unwrap();
-                store.append(uuid, result);
+                let t = get_record_batch_blob_from_batches(result);
+                store.append(uuid, t);
 
                 println!("{:?}", store.store.keys());
                 drop(store);
-            }
-            vayu_common::SchedulerSinkType::BuildAndStoreHashMap(uuid, join_node) => {
-                let mut sink = sinks::HashMapSink::new(uuid, join_node);
-                let hashmap = sink.build_map(result);
-                println!("BuildAndStoreHashMap storing in uuid {uuid}");
-                let mut map = self.global_store.lock().unwrap();
-                map.insert(uuid, hashmap.unwrap());
             }
         };
     }

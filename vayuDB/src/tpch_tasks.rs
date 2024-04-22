@@ -55,7 +55,7 @@ pub fn get_query_sql(query: usize) -> Result<Vec<String>> {
     }
 }
 
-pub async fn test_tpchq1() -> Result<Task> {
+pub async fn tpch_common() -> Result<SessionContext> {
     let ctx = SessionContext::default();
     let path = get_tpch_data_path()?;
     let common = CommonOpt {
@@ -74,13 +74,17 @@ pub async fn test_tpchq1() -> Result<Task> {
         disable_statistics: false,
     };
     opt.register_tables(&ctx).await.unwrap();
+    return Ok(ctx);
+}
+pub async fn test_tpchq1() -> Result<Task> {
+    // this is aggregate
+    let ctx = tpch_common().await.unwrap();
     let queries = get_query_sql(1).unwrap();
     // println!("{:?}", queries);
     let sql = queries.get(0).unwrap();
 
     let plan = get_execution_plan_from_sql(&ctx, sql).await.unwrap();
     let final_aggregate = plan.clone();
-    // let final_aggregate = AggregateOperator::new(final_aggregate);
 
     let plan = plan.children().get(0).unwrap().clone();
     println!(
@@ -88,6 +92,7 @@ pub async fn test_tpchq1() -> Result<Task> {
         displayable(plan.as_ref()).indent(true)
     );
     let source = Some(df2vayu::get_source_node(plan.clone()));
+
     let mut task = Task::new();
 
     let uuid = 55;
@@ -105,6 +110,58 @@ pub async fn test_tpchq1() -> Result<Task> {
     };
 
     task.add_pipeline(pipeline);
+
+    return Ok(task);
+}
+
+pub async fn test_tpchq2() -> Result<Task> {
+    // this is join
+    let ctx = tpch_common().await.unwrap();
+    let queries = get_query_sql(2).unwrap();
+    // println!("{:?}", queries);
+    let sql = queries.get(0).unwrap();
+
+    let plan = get_execution_plan_from_sql(&ctx, sql).await.unwrap();
+
+    let plan = plan.children().get(0).unwrap().clone();
+    println!(
+        "=== Physical plan ===\n{}\n",
+        displayable(plan.as_ref()).indent(true)
+    );
+
+    let uuid = 42;
+    let mut task = Task::new();
+
+    let (join_node, build_plan) = df2vayu::get_hash_build_pipeline(plan.clone(), uuid);
+
+    let build_source_pipeline = Some(df2vayu::get_source_node(build_plan.clone()));
+    let build_pipeline = DatafusionPipeline {
+        plan: build_plan,
+        sink: Some(SchedulerSinkType::StoreRecordBatch(uuid)),
+        id: 1,
+    };
+    let build_pipeline = SchedulerPipeline {
+        source: build_source_pipeline,
+        pipeline: build_pipeline,
+        finalize: vayu_common::FinalizeSinkType::BuildAndStoreHashMap(uuid, join_node),
+    };
+    task.add_pipeline(build_pipeline);
+    let uuid2 = 98;
+    // TODO: set this uuid in probe also
+    let probe_plan = plan.clone();
+    let probe_source_node = Some(df2vayu::get_source_node(probe_plan.clone()));
+    let probe_pipeline = DatafusionPipeline {
+        plan: probe_plan,
+        sink: Some(SchedulerSinkType::StoreRecordBatch(uuid2)),
+        id: 1,
+    };
+
+    let probe_pipeline = SchedulerPipeline {
+        source: probe_source_node,
+        pipeline: probe_pipeline,
+        finalize: vayu_common::FinalizeSinkType::PrintFromStore(uuid2),
+    };
+    task.add_pipeline(probe_pipeline);
 
     return Ok(task);
 }

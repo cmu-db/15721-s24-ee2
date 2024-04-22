@@ -1,5 +1,5 @@
 // use crate::dummy_tasks::test_hash_join;
-use crate::tpch_tasks::test_tpchq1;
+use crate::tpch_tasks::{test_tpchq1, test_tpchq2};
 use datafusion_benchmarks::tpch;
 use std::{hash::Hash, task::Poll};
 use vayu_common::SchedulerPipeline;
@@ -30,6 +30,17 @@ impl Scheduler {
         let mut task = futures::executor::block_on(test_tpchq1()).unwrap();
         let pipeline = task.pipelines.remove(0);
         return Poll::Ready(pipeline);
+
+        // if self.probe_pipeline.is_none() {
+        //     let mut task = futures::executor::block_on(test_tpchq2()).unwrap();
+        //     let pipeline = task.pipelines.remove(0);
+        //     self.probe_pipeline = Some(task.pipelines.remove(0));
+        //     self.state = HashJoinState::BuildSent(id);
+        //     return Poll::Ready(pipeline);
+        // } else {
+        //     let pipeline = self.probe_pipeline.take();
+        //     return Poll::Ready(pipeline.unwrap());
+        // }
 
         // let mut task = futures::executor::block_on(test_filter_project_aggregate()).unwrap();
         // let pipeline = task.pipelines.remove(0);
