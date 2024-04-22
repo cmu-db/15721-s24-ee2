@@ -1,10 +1,10 @@
 use crate::common::enums::operator_result_type::SinkResultType;
-use crate::physical_operator::{PhysicalOperator, Sink};
-use datafusion::arrow::array::{RecordBatch};
-use datafusion::arrow::datatypes::Schema;
-use std::sync::Arc;
-use datafusion::common::arrow::util::pretty;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::physical_operator::{PhysicalOperator, Sink};
+use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::Schema;
+use datafusion::common::arrow::util::pretty;
+use std::sync::Arc;
 
 pub struct DummySinkOperator;
 
@@ -17,15 +17,14 @@ impl DummySinkOperator {
 impl Sink for DummySinkOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
         pretty::print_batches(std::slice::from_ref(input.as_ref())).unwrap();
-        SinkResultType::Finished
+        SinkResultType::NeedMoreInput
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn finalize(&mut self) {
-    }
+    fn finalize(&mut self) {}
 }
 
 impl PhysicalOperator for DummySinkOperator {
@@ -34,6 +33,6 @@ impl PhysicalOperator for DummySinkOperator {
     }
 
     fn get_type(&self) -> PhysicalOperatorType {
-       todo!()
+        todo!()
     }
 }

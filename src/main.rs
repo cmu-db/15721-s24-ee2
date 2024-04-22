@@ -1,7 +1,7 @@
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
-use datafusion::logical_expr::{col,lit};
+use datafusion::logical_expr::{col, lit};
 use datafusion::physical_expr::create_physical_expr;
 use ee2::operator::dummy_sink::DummySinkOperator;
 use ee2::operator::filter::FilterOperator;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 fn main() {
     let schema = Schema::new(vec![
         Field::new("id", DataType::Int32, false),
-        Field::new("value", DataType::Int32, true)
+        Field::new("value", DataType::Int32, true),
     ]);
     let scan: Option<Box<dyn Source>> = Some(Box::new(ScanOperator::new(
         Arc::new(schema.clone()),
@@ -23,26 +23,27 @@ fn main() {
 
     let expr2 = col("id");
     let physical_expr2 = create_physical_expr(
-        &expr2, 
-        &DFSchema::try_from(schema.clone()).unwrap(), 
-        &ExecutionProps::new()
-    ).unwrap();
+        &expr2,
+        &DFSchema::try_from(schema.clone()).unwrap(),
+        &ExecutionProps::new(),
+    )
+    .unwrap();
     let project_expr = Vec::from([(physical_expr2, String::from("new_id"))]);
     let project = Box::new(ProjectionOperator::new(
-        Arc::new(schema.clone()), project_expr
+        Arc::new(schema.clone()),
+        project_expr,
     ));
 
     let project_output_schema = project.output_schema.clone();
     let expr = col("new_id").lt_eq(lit(5));
     let physical_expr = create_physical_expr(
-        &expr, 
-        &DFSchema::try_from(project_output_schema).unwrap(), 
-        &ExecutionProps::new()
-    ).unwrap();
+        &expr,
+        &DFSchema::try_from(project_output_schema).unwrap(),
+        &ExecutionProps::new(),
+    )
+    .unwrap();
 
-    let filter = Box::new(FilterOperator::new(
-        physical_expr
-    ));
+    let filter = Box::new(FilterOperator::new(physical_expr));
 
     let sink: Option<Box<dyn Sink>> = Some(Box::new(DummySinkOperator::new()));
 

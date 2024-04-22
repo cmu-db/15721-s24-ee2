@@ -1,11 +1,11 @@
-use std::any::Any;
 use crate::common::enums::operator_result_type::{
     OperatorResultType, SinkResultType, SourceResultType,
 };
+use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
+use std::any::Any;
 use std::sync::Arc;
-use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 
 pub trait PhysicalOperator {
     fn schema(&self) -> Arc<Schema>;

@@ -18,7 +18,7 @@ pub fn physical_operator_to_string(typ: &PhysicalOperatorType) -> &'static str {
         PhysicalOperatorType::Projection => "Projection",
         PhysicalOperatorType::HashAggregate => "HashAggregate",
         PhysicalOperatorType::HashJoinBuild => "HashJoinBuild",
-        PhysicalOperatorType::HashJoinProbe=> "HashJoinProbe",
+        PhysicalOperatorType::HashJoinProbe => "HashJoinProbe",
         PhysicalOperatorType::Limit => "Limit",
         PhysicalOperatorType::Sort => "Sort",
     }

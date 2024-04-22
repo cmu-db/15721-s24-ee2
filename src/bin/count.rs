@@ -12,24 +12,18 @@ use ee2::parallel::pipeline::Pipeline;
 use ee2::physical_operator::{Sink, Source};
 use std::sync::Arc;
 use std::vec;
+use ee2::helper::tpch_schema;
 
 fn main() {
-    //define schema of table to read
-    let schema = Schema::new(vec![
-        Field::new("fruit", DataType::Utf8, false),
-        Field::new("price", DataType::Int64, false),
-        Field::new("quantity", DataType::Int64, false),
-    ]);
-
-    //create scan operator with the schema
+    let schema = tpch_schema("customer");
     let scan: Option<Box<dyn Source>> = Some(Box::new(ScanOperator::new(
         Arc::new(schema.clone()),
-        "data/products.csv",
+        "data/tpch/customer.parquet",
     )));
 
     //create the group by condition
     //group based on grade
-    let expr = col("price") * col("quantity");
+    let expr = col("c_custkey");
     let aggregate_expr = create_physical_expr(
         &expr,
         &DFSchema::try_from(schema.clone()).unwrap(),
@@ -37,25 +31,17 @@ fn main() {
     )
     .unwrap();
 
-    let expr = col("fruit");
-    let group_by_expr = create_physical_expr(
-        &expr,
-        &DFSchema::try_from(schema.clone()).unwrap(),
-        &ExecutionProps::new(),
-    )
-    .unwrap();
-
     let aggregate_expr = create_aggregate_expr(
-        &AggregateFunction::Sum,
+        &AggregateFunction::Count,
         false,
         &[aggregate_expr.clone()],
         &[],
         &schema,
-        "total_price",
+        "num",
     )
     .unwrap();
 
-    let v = vec![(group_by_expr, String::from("fruit"))];
+    let v = vec![];
     //create the join build operator
     let sink: Option<Box<dyn Sink>> = Some(Box::new(HashAggregateOperator::new(
         vec![aggregate_expr],

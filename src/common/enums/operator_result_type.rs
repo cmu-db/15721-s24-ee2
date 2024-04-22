@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use datafusion::arrow::array::RecordBatch;
+use std::sync::Arc;
 
 pub enum OperatorResultType {
     HaveMoreOutput(Arc<RecordBatch>),
