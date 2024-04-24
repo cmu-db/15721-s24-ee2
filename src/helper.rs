@@ -1,5 +1,9 @@
 // This file contains some helper functions for tpch queries
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
+use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
+use crate::operator::scan::ScanOperator;
+use crate::parallel::pipeline::Pipeline;
+use crate::physical_operator::Source;
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -91,5 +95,50 @@ pub fn tpch_schema(table: &str) -> Schema {
         _ => {
             panic!("No such schema available for {table}")
         }
+    }
+}
+pub struct MyVisitor{
+    pub pipeline: Pipeline,
+}
+impl MyVisitor{
+    pub fn new() -> Self{
+        MyVisitor{
+            pipeline : Pipeline::new()
+        }
+    }
+}
+
+
+impl ExecutionPlanVisitor for MyVisitor {
+    type Error = ();
+    fn pre_visit(&mut self, _plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
+       Ok(true)
+    }
+
+    fn post_visit(&mut self, plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
+        let node = plan.as_any();
+
+        if let Some(operator) = node.downcast_ref::<datafusion::datasource::physical_plan::parquet::ParquetExec>() {
+            let filepath = operator.base_config().file_groups[0][0].object_meta.location.as_ref();
+            //add the / for the root (for some reason it's absent)
+            let filepath = format!("/{filepath}");
+            let scan = ScanOperator::new(operator.schema(), filepath.as_str());
+            let scan : Box<dyn Source> = Box::new(scan);
+            let scan = Some(scan);
+            self.pipeline.source_operator = scan;
+        }
+        else if let Some(_filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
+            println!("Visiting a filter");
+        }
+        else if let Some(_projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){
+            println!("Visiting a projection");
+        }
+        else if let Some(_coalesce)  = node.downcast_ref::<datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec>(){
+            println!("Visiting a coalesce");
+        }
+        else {
+            panic!("Visit not implemented for this node");
+        }
+        return Ok(true);
     }
 }

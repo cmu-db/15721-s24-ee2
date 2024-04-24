@@ -1,4 +1,4 @@
-use crate::common::enums::operator_result_type::SinkResultType;
+use crate::common::enums::operator_result_type::{SinkResultType};
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::Array;

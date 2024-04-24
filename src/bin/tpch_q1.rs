@@ -12,7 +12,7 @@ use ee2::physical_operator::{Sink, Source};
 use std::sync::Arc;
 use std::vec;
 use ee2::operator::hash_aggregate::HashAggregateOperator;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use datafusion::common::ScalarValue::Date32;
 use ee2::operator::filter::FilterOperator;
 
@@ -52,7 +52,7 @@ fn main() {
     ).unwrap();
 
 
-
+    //sum(l_quantity) as sum_qty
     let expr = col("l_quantity");
     let aggr= create_physical_expr(
         &expr,
@@ -71,6 +71,7 @@ fn main() {
     )
         .unwrap();
 
+    //sum(l_extendedprice) as sum_base_price
     let expr = col("l_extendedprice");
     let aggr= create_physical_expr(
         &expr,
