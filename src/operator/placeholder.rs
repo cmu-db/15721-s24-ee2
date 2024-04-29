@@ -1,22 +1,9 @@
-use std::cell::RefCell;
+use std::sync::Arc;
 use crate::common::enums::operator_result_type::SourceResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::physical_operator::{PhysicalOperator, Source};
-use datafusion::arrow::array::{ArrayRef, AsArray, BooleanArray, NullArray, RecordBatch, RecordBatchOptions};
-use datafusion::arrow::compute::can_cast_types;
-use datafusion::arrow::datatypes::{DataType, Field, Fields, Schema, SchemaRef};
-use datafusion::arrow::error::ArrowError;
-use datafusion::parquet::arrow::arrow_reader::{
-    ArrowPredicate, ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder, RowFilter
-};
-use datafusion::parquet::arrow::ProjectionMask;
-use datafusion::parquet::file::metadata::ParquetMetaData;
-use datafusion::physical_expr::utils::reassign_predicate_columns;
-use datafusion::physical_plan::PhysicalExpr;
-use std::collections::{BTreeSet, HashMap};
-use std::fs::File;
-use std::sync::Arc;
-use ahash::RandomState;
+use datafusion::arrow::array::{ArrayRef, NullArray, RecordBatch, RecordBatchOptions};
+use datafusion::arrow::datatypes::{DataType, Field, Fields, Schema};
 
 pub struct PlaceholderOperator {
     output_schema : Arc<Schema>,

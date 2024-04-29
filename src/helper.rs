@@ -15,9 +15,7 @@ use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{IntermediateOperator, Sink, Source};
 use ahash::HashMapExt;
 use datafusion::arrow::array::RecordBatch;
-use datafusion::logical_expr::UserDefinedLogicalNode;
 use datafusion::physical_plan::aggregates::AggregateMode;
-use crate::common::enums::physical_operator_type::PhysicalOperatorType::Placeholder;
 use crate::operator::placeholder::PlaceholderOperator;
 
 //return the schema of the region table in TPCH
