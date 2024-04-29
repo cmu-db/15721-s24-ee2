@@ -5,9 +5,7 @@ use datafusion::prelude::{ParquetReadOptions, SessionContext};
 use ee2::helper;
 use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use std::io::Write;
-use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::util::pretty;
-use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
 use ee2::operator::hash_aggregate::HashAggregateOperator;
 use ee2::operator::sort::SortOperator;
 

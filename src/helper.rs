@@ -154,9 +154,13 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
         else if let Some(_coalesce)  = node.downcast_ref::<datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec>(){
             println!("Visiting a coalesce");
         }
+        else if let Some(_repartition)  = node.downcast_ref::<datafusion::physical_plan::repartition::RepartitionExec>(){
+            println!("Visiting a repartition");
+        }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::aggregates::AggregateExec>(){
             let aggr_expr : Vec<_> = operator.aggr_expr().iter().cloned().collect();
-            let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(aggr_expr, vec![]));
+            let group_by: Vec<_> = operator.group_by().expr().iter().cloned().collect();
+            let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(aggr_expr, group_by));
             self.pipeline.sink_operator = Some(aggregate_op);
 
         }
