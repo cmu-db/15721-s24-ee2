@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use crate::common::enums::operator_result_type::SourceResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::physical_operator::{PhysicalOperator, Source};
@@ -12,9 +13,10 @@ use datafusion::parquet::arrow::ProjectionMask;
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::utils::reassign_predicate_columns;
 use datafusion::physical_plan::PhysicalExpr;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::sync::Arc;
+use ahash::RandomState;
 
 pub struct ScanOperator {
     reader: ParquetRecordBatchReader,
@@ -180,5 +182,50 @@ fn required_column_indices_of_expr(file_schema: &SchemaRef, node: &Arc<dyn Physi
     }
     for child in node.as_ref().children() {
         required_column_indices_of_expr(file_schema, &child, indices);
+    }
+}
+
+pub struct ScanIntermediatesOperator{
+    pub schema : SchemaRef,
+    pub uuid : usize,
+    pub store : Arc<RefCell<HashMap<usize, Option<RecordBatch>, RandomState>>>,
+    pub state : Option<bool>,
+}
+
+impl ScanIntermediatesOperator {
+    pub fn new(uuid : usize, schema : SchemaRef, store : Arc<RefCell<HashMap<usize, Option<RecordBatch>, RandomState>>>)->Self {
+        Self{
+            uuid,
+            schema,
+            store,
+            state : None,
+        }
+    }
+}
+
+impl PhysicalOperator for ScanIntermediatesOperator{
+    fn schema(&self) -> Arc<Schema> {
+        self.schema.clone()
+    }
+    fn get_type(&self) -> PhysicalOperatorType {
+        PhysicalOperatorType::ScanIntermediates
+    }
+}
+
+impl Source for ScanIntermediatesOperator{
+    fn get_data(&mut self) -> SourceResultType {
+        if let Some(state) = self.state {
+            return SourceResultType::Finished;
+        }
+        else {
+            let mut binding = self.store.borrow_mut();
+            let entry = binding.remove(&self.uuid).unwrap();
+            if let Some(batch) = entry {
+                self.state = Some(true);
+                return SourceResultType::HaveMoreOutput(Arc::new(batch));
+            } else {
+                return SourceResultType::Finished;
+            }
+        }
     }
 }

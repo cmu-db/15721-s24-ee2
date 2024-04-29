@@ -1,18 +1,18 @@
 use std::io;
 use std::time::Instant;
 use datafusion::physical_plan::accept;
-use datafusion::prelude::{ParquetReadOptions, SessionContext};
+use datafusion::prelude::{ParquetReadOptions, SessionConfig, SessionContext};
 use ee2::helper;
 use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use std::io::Write;
-use datafusion::arrow::util::pretty;
 use ee2::operator::hash_aggregate::HashAggregateOperator;
 use ee2::operator::sort::SortOperator;
 
 #[tokio::main]
 async fn main() {
 
-    let ctx = SessionContext::new();
+    let config = SessionConfig::new().set_bool("datafusion.optimizer.repartition_aggregations",false).set_bool("datafusion.optimizer.repartition_joins",false);
+    let ctx = SessionContext::new_with_config(config);
     ctx.register_parquet("customer", "data/tpch/customer.parquet", ParquetReadOptions::default()).await.unwrap();
     ctx.register_parquet("lineitem", "data/tpch/lineitem.parquet", ParquetReadOptions::default()).await.unwrap();
     ctx.register_parquet("nation", "data/tpch/nation.parquet", ParquetReadOptions::default()).await.unwrap();
@@ -35,48 +35,56 @@ async fn main() {
             Err(_) => {println!("Error occurred. Try again"); continue;}
         }
         let plan = df.create_physical_plan().await.unwrap();
-        println!("Physical plan : {:#?}", plan);
+        //println!("Physical plan : {:#?}", plan);
 
         let mut visitor = helper::PhysicalToPhysicalVisitor::new();
         let _ = accept(plan.as_ref(), &mut visitor);
 
-        let mut pipeline = visitor.pipeline;
-        match pipeline.sink_operator {
-            None => {
+        let pipelines = visitor.pipelines;
+        let mut counter = 0;
+        for mut pipeline in pipelines{
+
+            //println!("{:?}",physical_operator_to_string(&pipeline.source_operator.unwrap().get_type()));
+            //println!("{:?}",physical_operator_to_string(&pipeline.sink_operator.unwrap().get_type()));
+            //continue;
+
+
+            if pipeline.sink_operator.is_none(){
                 pipeline.sink_operator = Some(Box::new(PhysicalBatchCollector::new()));
             }
-            Some(_) => {}
-        }
 
-        //run the query
-        let start = Instant::now();
-        pipeline.execute();
-        let duration = start.elapsed();
+            //run the query
+            let start = Instant::now();
+            pipeline.execute();
+            let duration = start.elapsed();
 
-        let sink = pipeline.sink_operator.take().unwrap();
+            let sink = pipeline.sink_operator.take().unwrap();
 
-        if let Some(sort) = sink.as_any().downcast_ref::<SortOperator>(){
-            let data = &sort.sorted_data.data;
-            match data {
-                None => {}
-                Some(sorted_data) => {
-                    let _ = pretty::print_batches(std::slice::from_ref(sorted_data));
-                }
+            if let Some(sort) = sink.as_any().downcast_ref::<SortOperator>(){
+                let data = &sort.sorted_data.data;
+                visitor.store.borrow_mut().insert(counter, data.clone());
+                // match data {
+                //     None => {}
+                //     Some(sorted_data) => {
+                //         let _ = pretty::print_batches(std::slice::from_ref(sorted_data));
+                //     }
+                // }
             }
-        }
-        else if let Some(collector) = sink.as_any().downcast_ref::<PhysicalBatchCollector>(){
+            else if let Some(collector) = sink.as_any().downcast_ref::<PhysicalBatchCollector>(){
                 collector.print();
-        }
-        else if let Some(aggregate) = sink.as_any().downcast_ref::<HashAggregateOperator>(){
-            let grouped_data = &aggregate.aggregated_data;
-            let _ = pretty::print_batches(std::slice::from_ref(grouped_data.data.as_ref().unwrap()));
-            //todo group by
-        }
-        else {
-            panic!("not implemented")
+            }
+            else if let Some(aggregate) = sink.as_any().downcast_ref::<HashAggregateOperator>(){
+                let grouped_data = &aggregate.aggregated_data.data;
+                visitor.store.borrow_mut().insert(counter, grouped_data.clone());
+            }
+            else {
+                panic!("not implemented")
+            }
+
+            println!("Duration of query is {:?}", duration);
+            counter +=1;
         }
 
-        println!("Duration of query is {:?}", duration);
-    }
+        }
 
 }

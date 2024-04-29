@@ -1,5 +1,6 @@
 pub enum PhysicalOperatorType {
     Scan,
+    ScanIntermediates,
     Filter,
     Projection,
     HashAggregate,
@@ -14,6 +15,7 @@ pub enum PhysicalOperatorType {
 pub fn physical_operator_to_string(typ: &PhysicalOperatorType) -> &'static str {
     match typ {
         PhysicalOperatorType::Scan => "Scan",
+        PhysicalOperatorType::ScanIntermediates=> "Scan Intermediates",
         PhysicalOperatorType::Filter => "Filter",
         PhysicalOperatorType::Projection => "Projection",
         PhysicalOperatorType::HashAggregate => "HashAggregate",

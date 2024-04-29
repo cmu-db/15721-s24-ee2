@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::vec;
+use ahash::HashMap;
 // This file contains some helper functions for tpch queries
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
@@ -5,10 +9,14 @@ use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
 use crate::operator::projection::ProjectionOperator;
-use crate::operator::scan::ScanOperator;
+use crate::operator::scan::{ScanIntermediatesOperator, ScanOperator};
 use crate::operator::sort::SortOperator;
 use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{IntermediateOperator, Sink, Source};
+use ahash::HashMapExt;
+use datafusion::arrow::array::RecordBatch;
+use datafusion::logical_expr::UserDefinedLogicalNode;
+use datafusion::physical_plan::aggregates::AggregateMode;
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -103,30 +111,28 @@ pub fn tpch_schema(table: &str) -> Schema {
     }
 }
 pub struct PhysicalToPhysicalVisitor {
-    pub pipeline: Pipeline,
-    done: bool
+    pub pipelines: Vec<Pipeline>,
+    pub current_pipeline : usize ,
+    pub store : Arc<RefCell<HashMap<usize, Option<RecordBatch>>>>,
 }
 impl PhysicalToPhysicalVisitor {
     pub fn new() -> Self{
         PhysicalToPhysicalVisitor {
-            pipeline : Pipeline::new(),
-            done: false
+            pipelines : vec![],
+            current_pipeline : 0,
+            store : Arc::new(RefCell::new(HashMap::new())),
         }
     }
 }
 
 
-impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
+impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor{
     type Error = ();
     fn pre_visit(&mut self, _plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
        Ok(true)
     }
 
     fn post_visit(&mut self, plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
-        if self.done {
-            println!("skipping another pipeline");
-            return Ok(true);
-        }
         let node = plan.as_any();
 
         if let Some(operator) = node.downcast_ref::<datafusion::datasource::physical_plan::parquet::ParquetExec>() {
@@ -136,17 +142,18 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let scan = ScanOperator::new(filepath.as_str(), operator.schema(), operator.predicate().cloned());
             let scan : Box<dyn Source> = Box::new(scan);
             let scan = Some(scan);
-            self.pipeline.source_operator = scan;
+            self.pipelines.push(Pipeline::new());
+            self.pipelines.last_mut().unwrap().source_operator = scan;
         }
         else if let Some(filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
             let predicate = filter.predicate().clone();
             let filter_operator = Box::new(FilterOperator::new(predicate, filter.schema()));
-            self.pipeline.operators.push(filter_operator);
+            self.pipelines.last_mut().unwrap().operators.push(filter_operator);
         }
         else if let Some(projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){
-            let schema = match &self.pipeline.operators.last() {
+            let schema = match &self.pipelines.last().unwrap().operators.last() {
                 None => {
-                    self.pipeline.source_operator.as_ref().unwrap().as_ref().schema()
+                    self.pipelines.last().unwrap().source_operator.as_ref().unwrap().as_ref().schema()
                 }
                 Some(opearator) => {
                     opearator.schema()
@@ -154,28 +161,39 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             };
             let projection = ProjectionOperator::new(schema, projection.expr().to_vec());
             let projection : Box<dyn IntermediateOperator> = Box::new(projection);
-            self.pipeline.operators.push(projection);
+            self.pipelines.last_mut().unwrap().operators.push(projection);
         }
         else if let Some(_coalesce)  = node.downcast_ref::<datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec>(){
-            println!("Visiting a coalesce");
+            //println!("Visiting a coalesce batches");
+        }
+        else if let Some(_coalesce)  = node.downcast_ref::<datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec>(){
+            //println!("Visiting a coalesce partitions");
         }
         else if let Some(_repartition)  = node.downcast_ref::<datafusion::physical_plan::repartition::RepartitionExec>(){
-            println!("Visiting a repartition");
+            //println!("Visiting a repartition");
         }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::aggregates::AggregateExec>(){
-            let schema = match &self.pipeline.operators.last() {
+            let schema = match &self.pipelines.last().unwrap().operators.last() {
                 None => {
-                    self.pipeline.source_operator.as_ref().unwrap().as_ref().schema()
+                    self.pipelines.last().unwrap().source_operator.as_ref().unwrap().as_ref().schema()
                 }
                 Some(opearator) => {
                     opearator.schema()
                 }
             };
+            match operator.mode() {
+                AggregateMode::Partial => {return Ok(true);}
+                _ => {}
+            }
             let aggr_expr : Vec<_> = operator.aggr_expr().iter().cloned().collect();
             let group_by: Vec<_> = operator.group_by().expr().iter().cloned().collect();
             let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(schema, aggr_expr, group_by));
-            self.pipeline.sink_operator = Some(aggregate_op);
-            self.done = true;
+            self.pipelines.last_mut().unwrap().sink_operator = Some(aggregate_op);
+
+            self.pipelines.push(Pipeline::new());
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
+            self.current_pipeline+=1;
+            self.pipelines.last_mut().unwrap().source_operator = Some(scan);
 
         }
         else if let Some(_hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
@@ -184,14 +202,19 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::sorts::sort::SortExec>(){
             let sort_expr  : Vec<_> = operator.expr().iter().cloned().collect();
             let sort : Box <dyn Sink> = Box::new(SortOperator::new(sort_expr));
-            self.pipeline.sink_operator = Some(sort);
-            self.done = true;
+            self.pipelines.last_mut().unwrap().sink_operator = Some(sort);
+
+            self.pipelines.push(Pipeline::new());
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
+            self.current_pipeline+=1;
+            self.pipelines.last_mut().unwrap().source_operator = Some(scan);
         }
 
         else if let Some(operator) = node.downcast_ref::<PlaceholderRowExec>(){
             println!("place holder {:#?}",operator);
         }
         else {
+            println!("node is {:#?}",plan);
             panic!("Visit not implemented for this node");
         }
         return Ok(true);
