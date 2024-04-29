@@ -17,6 +17,8 @@ use ahash::HashMapExt;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::logical_expr::UserDefinedLogicalNode;
 use datafusion::physical_plan::aggregates::AggregateMode;
+use crate::common::enums::physical_operator_type::PhysicalOperatorType::Placeholder;
+use crate::operator::placeholder::PlaceholderOperator;
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -211,7 +213,11 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor{
         }
 
         else if let Some(operator) = node.downcast_ref::<PlaceholderRowExec>(){
-            println!("place holder {:#?}",operator);
+            let placeholer = PlaceholderOperator::new(operator.schema());
+            let placeholer : Box<dyn Source> = Box::new(placeholer);
+            let placeholer = Some(placeholer);
+            self.pipelines.push(Pipeline::new());
+            self.pipelines.last_mut().unwrap().source_operator = placeholer;
         }
         else {
             println!("node is {:#?}",plan);
