@@ -147,7 +147,13 @@ impl Sink for HashAggregateOperator {
                 }).collect::<Result<Vec<_>,_>>().unwrap();
 
                 for (group_id, (_, grouped_row_lists)) in self.hash_table.iter().enumerate() {
+                    if grouped_row_lists.row_lists.len() >= batch_id {
+                        continue;
+                    }
                     let row_list = grouped_row_lists.row_lists[batch_id].clone();
+                    if row_list.is_empty() {
+                        continue;
+                    }
                     let row_list_array = UInt64Array::from(row_list);
                     let filtered_input_cols = input_cols.iter().map(|c| {
                         compute::take(c, &row_list_array, None)
