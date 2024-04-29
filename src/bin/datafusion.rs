@@ -5,6 +5,11 @@ use datafusion::prelude::{ParquetReadOptions, SessionContext};
 use ee2::helper;
 use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use std::io::Write;
+use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::util::pretty;
+use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
+use ee2::operator::hash_aggregate::HashAggregateOperator;
+use ee2::operator::sort::SortOperator;
 
 #[tokio::main]
 async fn main() {
@@ -32,10 +37,12 @@ async fn main() {
             Err(_) => {println!("Error occurred. Try again"); continue;}
         }
         let plan = df.create_physical_plan().await.unwrap();
-        let mut my_visitor = helper::MyVisitor::new();
-        let _ = accept(plan.as_ref(), &mut my_visitor);
+        println!("Physical plan : {:#?}", plan);
 
-        let mut pipeline = my_visitor.pipeline;
+        let mut visitor = helper::PhysicalToPhysicalVisitor::new();
+        let _ = accept(plan.as_ref(), &mut visitor);
+
+        let mut pipeline = visitor.pipeline;
         match pipeline.sink_operator {
             None => {
                 pipeline.sink_operator = Some(Box::new(PhysicalBatchCollector::new()));
@@ -43,22 +50,35 @@ async fn main() {
             Some(_) => {}
         }
 
-
+        //run the query
         let start = Instant::now();
         pipeline.execute();
         let duration = start.elapsed();
 
+        let sink = pipeline.sink_operator.take().unwrap();
 
-        //print results
-        let collector = pipeline.sink_operator.take().unwrap();
-        let collector = collector
-            .as_any()
-            .downcast_ref::<PhysicalBatchCollector>()
-            .unwrap();
-        collector.print();
+        if let Some(sort) = sink.as_any().downcast_ref::<SortOperator>(){
+            let data = &sort.sorted_data.data;
+            match data {
+                None => {}
+                Some(sorted_data) => {
+                    let _ = pretty::print_batches(std::slice::from_ref(sorted_data));
+                }
+            }
+        }
+        else if let Some(collector) = sink.as_any().downcast_ref::<PhysicalBatchCollector>(){
+                collector.print();
+        }
+        else if let Some(aggregate) = sink.as_any().downcast_ref::<HashAggregateOperator>(){
+            let grouped_data = &aggregate.aggregated_data;
+            let _ = pretty::print_batches(std::slice::from_ref(grouped_data.data.as_ref().unwrap()));
+            //todo group by
+        }
+        else {
+            panic!("not implemented")
+        }
 
         println!("Duration of query is {:?}", duration);
-
     }
 
 }

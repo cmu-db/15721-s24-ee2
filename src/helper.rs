@@ -1,9 +1,17 @@
 // This file contains some helper functions for tpch queries
+use std::sync::Arc;
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
+use datafusion::physical_expr::expressions::Column;
+use datafusion::physical_expr::{PhysicalExpr, PhysicalSortExpr};
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
+use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
+use crate::operator::filter::FilterOperator;
+use crate::operator::hash_aggregate::HashAggregateOperator;
+use crate::operator::projection::ProjectionOperator;
 use crate::operator::scan::ScanOperator;
+use crate::operator::sort::SortOperator;
 use crate::parallel::pipeline::Pipeline;
-use crate::physical_operator::Source;
+use crate::physical_operator::{IntermediateOperator, Sink, Source};
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -97,19 +105,19 @@ pub fn tpch_schema(table: &str) -> Schema {
         }
     }
 }
-pub struct MyVisitor{
+pub struct PhysicalToPhysicalVisitor {
     pub pipeline: Pipeline,
 }
-impl MyVisitor{
+impl PhysicalToPhysicalVisitor {
     pub fn new() -> Self{
-        MyVisitor{
+        PhysicalToPhysicalVisitor {
             pipeline : Pipeline::new()
         }
     }
 }
 
 
-impl ExecutionPlanVisitor for MyVisitor {
+impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
     type Error = ();
     fn pre_visit(&mut self, _plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
        Ok(true)
@@ -126,15 +134,63 @@ impl ExecutionPlanVisitor for MyVisitor {
             let scan : Box<dyn Source> = Box::new(scan);
             let scan = Some(scan);
             self.pipeline.source_operator = scan;
+
+            //just project the specific columns
+            let statistics = &operator.base_config().projection;
+            if let Some(v) = statistics{
+                //we should create a projection immediately after the scan
+                let mut projected_columns = vec![];
+                for col_index in v{
+                    let original_name = String::from(operator.base_config().file_schema.fields[*col_index].name());
+                    let col_ref : Arc<dyn PhysicalExpr> = Arc::new(Column::new(original_name.as_str() ,*col_index));
+                    let new_expr = (col_ref, original_name);
+                    projected_columns.push(new_expr);
+                }
+
+                let projection = ProjectionOperator::new(Arc::new(operator.base_config().file_schema.as_ref().clone()), projected_columns);
+                let projection : Box<dyn IntermediateOperator> = Box::new(projection);
+                self.pipeline.operators.push(projection);
+            }
         }
-        else if let Some(_filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
-            println!("Visiting a filter");
+        else if let Some(filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
+            let predicate = filter.predicate().clone();
+            let filter_operator = Box::new(FilterOperator::new(predicate));
+            self.pipeline.operators.push(filter_operator);
         }
-        else if let Some(_projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){
-            println!("Visiting a projection");
+        else if let Some(projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){
+
+            let schema = match &self.pipeline.operators.last() {
+                None => {
+                    self.pipeline.source_operator.as_ref().unwrap().as_ref().schema()
+                }
+                Some(opearator) => {
+                    opearator.schema()
+                }
+            };
+            let projection = ProjectionOperator::new(schema, projection.expr().to_vec());
+            let projection : Box<dyn IntermediateOperator> = Box::new(projection);
+            self.pipeline.operators.push(projection);
         }
         else if let Some(_coalesce)  = node.downcast_ref::<datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec>(){
             println!("Visiting a coalesce");
+        }
+        else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::aggregates::AggregateExec>(){
+            let aggr_expr : Vec<_> = operator.aggr_expr().iter().cloned().collect();
+            let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(aggr_expr, vec![]));
+            self.pipeline.sink_operator = Some(aggregate_op);
+
+        }
+        else if let Some(_hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
+            println!("Visiting a hash_join");
+        }
+        else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::sorts::sort::SortExec>(){
+            let sort_expr  : Vec<_> = operator.expr().iter().cloned().collect();
+            let sort : Box <dyn Sink> = Box::new(SortOperator::new(sort_expr));
+            self.pipeline.sink_operator = Some(sort);
+        }
+
+        else if let Some(operator) = node.downcast_ref::<PlaceholderRowExec>(){
+            println!("place holder {:#?}",operator);
         }
         else {
             panic!("Visit not implemented for this node");
