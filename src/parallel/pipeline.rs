@@ -4,6 +4,7 @@ use crate::common::enums::operator_result_type::{
 use crate::physical_operator::{IntermediateOperator, Sink, Source};
 use datafusion::arrow::array::RecordBatch;
 use std::sync::Arc;
+use crate::common::enums::physical_operator_type::physical_operator_to_string;
 
 pub struct Pipeline {
     pub source_operator: Option<Box<dyn Source>>,
@@ -17,6 +18,27 @@ impl Pipeline {
             source_operator: None,
             sink_operator: None,
             operators: vec![],
+        }
+    }
+
+    pub fn print(&self){
+        match &self.source_operator {
+            None => {}
+            Some(source) => {
+                let op = physical_operator_to_string(&source.get_type());
+                println!("source is {}",op);
+            }
+        }
+        for op in &self.operators{
+            let op = physical_operator_to_string(&op.get_type());
+            println!("Intermediate operator is {}",op);
+        }
+        match &self.sink_operator{
+            None => {}
+            Some(sink) => {
+                let op = physical_operator_to_string(&sink.get_type());
+                println!("Sink is {}",op);
+            }
         }
     }
 
