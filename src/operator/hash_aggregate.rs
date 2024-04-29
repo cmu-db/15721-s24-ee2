@@ -147,7 +147,7 @@ impl Sink for HashAggregateOperator {
                 }).collect::<Result<Vec<_>,_>>().unwrap();
 
                 for (group_id, (_, grouped_row_lists)) in self.hash_table.iter().enumerate() {
-                    if grouped_row_lists.row_lists.len() >= batch_id {
+                    if grouped_row_lists.row_lists.len() <= batch_id {
                         continue;
                     }
                     let row_list = grouped_row_lists.row_lists[batch_id].clone();

@@ -2,6 +2,7 @@ use std::io;
 use std::time::Instant;
 use datafusion::physical_plan::accept;
 use datafusion::prelude::{ParquetReadOptions, SessionConfig, SessionContext};
+use datafusion::scalar::ScalarValue;
 use ee2::helper;
 use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
 use std::io::Write;
@@ -11,7 +12,11 @@ use ee2::operator::sort::SortOperator;
 #[tokio::main]
 async fn main() {
 
-    let config = SessionConfig::new().set_bool("datafusion.optimizer.repartition_aggregations",false).set_bool("datafusion.optimizer.repartition_joins",false);
+    let config = SessionConfig::new()
+        .set("datafusion.execution.target_partitions", ScalarValue::UInt64(Some(1)))
+        .set_bool("datafusion.execution.coalesce_batches",false)
+        .set_bool("datafusion.optimizer.repartition_aggregations",false)
+        .set_bool("datafusion.optimizer.repartition_joins",false);
     let ctx = SessionContext::new_with_config(config);
     ctx.register_parquet("customer", "data/tpch/customer.parquet", ParquetReadOptions::default()).await.unwrap();
     ctx.register_parquet("lineitem", "data/tpch/lineitem.parquet", ParquetReadOptions::default()).await.unwrap();
@@ -47,7 +52,6 @@ async fn main() {
             //println!("{:?}",physical_operator_to_string(&pipeline.source_operator.unwrap().get_type()));
             //println!("{:?}",physical_operator_to_string(&pipeline.sink_operator.unwrap().get_type()));
             //continue;
-
 
             if pipeline.sink_operator.is_none(){
                 pipeline.sink_operator = Some(Box::new(PhysicalBatchCollector::new()));
