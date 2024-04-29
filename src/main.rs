@@ -16,12 +16,22 @@ fn main() {
         Field::new("id", DataType::Int32, false),
         Field::new("value", DataType::Int32, true),
     ]);
+
+    let expr = col("id").lt_eq(lit(5));
+    let physical_expr = create_physical_expr(
+        &expr,
+        &DFSchema::try_from(schema.clone()).unwrap(),
+        &ExecutionProps::new(),
+    )
+    .unwrap();
+
     let scan: Option<Box<dyn Source>> = Some(Box::new(ScanOperator::new(
-        Arc::new(schema.clone()),
         "data/data.parquet",
+        Arc::new(schema.clone()),
+        Some(physical_expr)
     )));
 
-    let expr2 = col("id");
+    /*let expr2 = col("id");
     let physical_expr2 = create_physical_expr(
         &expr2,
         &DFSchema::try_from(schema.clone()).unwrap(),
@@ -43,14 +53,14 @@ fn main() {
     )
     .unwrap();
 
-    let filter = Box::new(FilterOperator::new(physical_expr));
+    let filter = Box::new(FilterOperator::new(physical_expr));*/
 
     let sink: Option<Box<dyn Sink>> = Some(Box::new(PhysicalBatchCollector::new()));
 
     let mut pipeline = Pipeline::new();
     pipeline.source_operator = scan;
-    pipeline.operators.push(project);
-    pipeline.operators.push(filter);
+    //pipeline.operators.push(project);
+    //pipeline.operators.push(filter);
     pipeline.sink_operator = sink;
 
     pipeline.execute();

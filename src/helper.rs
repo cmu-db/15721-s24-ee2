@@ -122,10 +122,10 @@ impl ExecutionPlanVisitor for MyVisitor {
             let filepath = operator.base_config().file_groups[0][0].object_meta.location.as_ref();
             //add the / for the root (for some reason it's absent)
             let filepath = format!("/{filepath}");
-            let scan = ScanOperator::new(operator.schema(), filepath.as_str());
-            let scan : Box<dyn Source> = Box::new(scan);
-            let scan = Some(scan);
-            self.pipeline.source_operator = scan;
+            ////let scan = ScanOperator::new(filepath.as_str());
+            //let scan : Box<dyn Source> = Box::new(scan);
+            //let scan = Some(scan);
+            //self.pipeline.source_operator = scan;
         }
         else if let Some(_filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
             println!("Visiting a filter");

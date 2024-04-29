@@ -12,11 +12,13 @@ use datafusion::physical_plan::repartition::RepartitionExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionConfig;
 use datafusion::prelude::SessionContext;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::helper::tpch_schema;
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
+use crate::operator::projection::ProjectionOperator;
 use crate::operator::scan::ScanOperator;
 use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{Sink, Source};
@@ -34,19 +36,28 @@ pub fn df2pipeline(plan: Arc<dyn ExecutionPlan>) -> Pipeline {
     // set batch size here
     // println!("batch size {context.se}");
 
-    if let Some(_) = p.downcast_ref::<ParquetExec>() {
-        let schema = tpch_schema("lineitem");
-
-        //create scan operator with the schema
-        let scan: Option<Box<dyn Source>> = Some(Box::new(ScanOperator::new(
-            Arc::new(schema.clone()),
-            "data/tpch/lineitem.parquet",
-        )));
-        return Pipeline {
-            source_operator: scan,
+    if let Some(exec) = p.downcast_ref::<ParquetExec>() {
+        let mut new_pipeline = Pipeline {
+            source_operator: None,
             operators: vec![],
-            sink_operator: None,
+            sink_operator: None
         };
+
+        // scan
+        let file_path = exec.base_config().file_groups[0][0].object_meta.location.as_ref();
+        let file_path = format!("/{file_path}");
+        let scan = Box::new(ScanOperator::new(
+            file_path.as_str(), exec.schema(), exec.predicate().cloned()
+        ));
+        new_pipeline.source_operator = Some(scan);
+
+        // optional filter
+        if let Some(predicate) = exec.predicate() {
+            let filter = Box::new(FilterOperator::new(predicate.clone()));
+            new_pipeline.operators.push(filter);
+        }
+
+        return new_pipeline;
     }
     if let Some(exec) = p.downcast_ref::<AggregateExec>() {
         let mut pipeline = df2pipeline(exec.input().clone());

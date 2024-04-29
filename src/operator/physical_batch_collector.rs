@@ -26,6 +26,7 @@ impl PhysicalBatchCollector {
 
 impl Sink for PhysicalBatchCollector {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
+        println!("out: {:?}", input);
         self.result.push(input.as_ref().clone());
         SinkResultType::NeedMoreInput
     }
