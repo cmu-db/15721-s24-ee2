@@ -144,7 +144,6 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             self.pipeline.operators.push(filter_operator);
         }
         else if let Some(projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){
-
             let schema = match &self.pipeline.operators.last() {
                 None => {
                     self.pipeline.source_operator.as_ref().unwrap().as_ref().schema()
@@ -164,9 +163,17 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             println!("Visiting a repartition");
         }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::aggregates::AggregateExec>(){
+            let schema = match &self.pipeline.operators.last() {
+                None => {
+                    self.pipeline.source_operator.as_ref().unwrap().as_ref().schema()
+                }
+                Some(opearator) => {
+                    opearator.schema()
+                }
+            };
             let aggr_expr : Vec<_> = operator.aggr_expr().iter().cloned().collect();
             let group_by: Vec<_> = operator.group_by().expr().iter().cloned().collect();
-            let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(aggr_expr, group_by));
+            let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(schema, aggr_expr, group_by));
             self.pipeline.sink_operator = Some(aggregate_op);
             self.done = true;
 
