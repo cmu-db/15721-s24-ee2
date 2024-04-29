@@ -1,6 +1,6 @@
 INSTALL TPCH;
 LOAD TPCH;
-CALL dbgen(sf=10);
+CALL dbgen(sf=1);
 
 copy (select * from customer) to 'data/tpch/customer.parquet' (Format 'parquet');
 copy (select * from lineitem) to 'data/tpch/lineitem.parquet' (Format 'parquet');

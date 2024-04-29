@@ -1,10 +1,7 @@
 // This file contains some helper functions for tpch queries
-use std::sync::Arc;
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
-use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_expr::{PhysicalExpr, PhysicalSortExpr};
-use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
 use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
+use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
 use crate::operator::projection::ProjectionOperator;
@@ -130,31 +127,14 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let filepath = operator.base_config().file_groups[0][0].object_meta.location.as_ref();
             //add the / for the root (for some reason it's absent)
             let filepath = format!("/{filepath}");
-            let scan = ScanOperator::new(operator.schema(), filepath.as_str());
+            let scan = ScanOperator::new(filepath.as_str(), operator.schema(), operator.predicate().cloned());
             let scan : Box<dyn Source> = Box::new(scan);
             let scan = Some(scan);
             self.pipeline.source_operator = scan;
-
-            //just project the specific columns
-            let statistics = &operator.base_config().projection;
-            if let Some(v) = statistics{
-                //we should create a projection immediately after the scan
-                let mut projected_columns = vec![];
-                for col_index in v{
-                    let original_name = String::from(operator.base_config().file_schema.fields[*col_index].name());
-                    let col_ref : Arc<dyn PhysicalExpr> = Arc::new(Column::new(original_name.as_str() ,*col_index));
-                    let new_expr = (col_ref, original_name);
-                    projected_columns.push(new_expr);
-                }
-
-                let projection = ProjectionOperator::new(Arc::new(operator.base_config().file_schema.as_ref().clone()), projected_columns);
-                let projection : Box<dyn IntermediateOperator> = Box::new(projection);
-                self.pipeline.operators.push(projection);
-            }
         }
         else if let Some(filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
             let predicate = filter.predicate().clone();
-            let filter_operator = Box::new(FilterOperator::new(predicate));
+            let filter_operator = Box::new(FilterOperator::new(predicate, filter.schema()));
             self.pipeline.operators.push(filter_operator);
         }
         else if let Some(projection)  = node.downcast_ref::<datafusion::physical_plan::projection::ProjectionExec>(){

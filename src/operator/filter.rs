@@ -9,11 +9,12 @@ use std::sync::Arc;
 
 pub struct FilterOperator {
     expression: Arc<dyn PhysicalExpr>,
+    schema: Arc<Schema>
 }
 
 impl FilterOperator {
-    pub fn new(expression: Arc<dyn PhysicalExpr>) -> Self {
-        FilterOperator { expression }
+    pub fn new(expression: Arc<dyn PhysicalExpr>, schema: Arc<Schema>) -> Self {
+        FilterOperator { expression, schema: schema.clone() }
     }
 }
 
@@ -33,7 +34,7 @@ impl IntermediateOperator for FilterOperator {
 
 impl PhysicalOperator for FilterOperator {
     fn schema(&self) -> Arc<Schema> {
-        todo!()
+        self.schema.clone()
     }
 
     fn get_type(&self) -> PhysicalOperatorType {
