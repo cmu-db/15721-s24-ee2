@@ -104,11 +104,13 @@ pub fn tpch_schema(table: &str) -> Schema {
 }
 pub struct PhysicalToPhysicalVisitor {
     pub pipeline: Pipeline,
+    done: bool
 }
 impl PhysicalToPhysicalVisitor {
     pub fn new() -> Self{
         PhysicalToPhysicalVisitor {
-            pipeline : Pipeline::new()
+            pipeline : Pipeline::new(),
+            done: false
         }
     }
 }
@@ -121,6 +123,10 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
     }
 
     fn post_visit(&mut self, plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
+        if self.done {
+            println!("skipping another pipeline");
+            return Ok(true);
+        }
         let node = plan.as_any();
 
         if let Some(operator) = node.downcast_ref::<datafusion::datasource::physical_plan::parquet::ParquetExec>() {
@@ -162,6 +168,7 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let group_by: Vec<_> = operator.group_by().expr().iter().cloned().collect();
             let aggregate_op : Box<dyn Sink>= Box::new(HashAggregateOperator::new(aggr_expr, group_by));
             self.pipeline.sink_operator = Some(aggregate_op);
+            self.done = true;
 
         }
         else if let Some(_hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
@@ -171,6 +178,7 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let sort_expr  : Vec<_> = operator.expr().iter().cloned().collect();
             let sort : Box <dyn Sink> = Box::new(SortOperator::new(sort_expr));
             self.pipeline.sink_operator = Some(sort);
+            self.done = true;
         }
 
         else if let Some(operator) = node.downcast_ref::<PlaceholderRowExec>(){

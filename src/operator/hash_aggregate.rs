@@ -1,13 +1,13 @@
-use crate::common::enums::operator_result_type::{SinkResultType};
+use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::physical_operator::{PhysicalOperator, Sink};
-use datafusion::arrow::array::Array;
-use datafusion::arrow::array::{GenericByteArray, Int32Array, RecordBatch, UInt64Array};
+use ahash::random_state::RandomState;
+use datafusion::arrow::array::{RecordBatch, UInt64Array};
 use datafusion::arrow::compute;
-use datafusion::arrow::datatypes::{DataType, Field, Schema, Utf8Type};
+use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::common::hash_utils::create_hashes;
 use datafusion::physical_expr::{AggregateExpr, PhysicalExpr};
 use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hasher};
 use std::sync::Arc;
 
 pub struct AggregatedData {
@@ -29,6 +29,7 @@ pub struct HashAggregateOperator {
     //Key = hash(col1,col2,col3...)
     //values = row_id
     hash_table: HashMap<u64, Vec<u64>>,
+    random_state: RandomState,
 }
 
 impl HashAggregateOperator {
@@ -43,6 +44,7 @@ impl HashAggregateOperator {
             originals: Vec::new(),
             originals_counter: 0,
             hash_table: Default::default(),
+            random_state: RandomState::generate_with(1, 2, 3, 4),
         }
     }
 }
@@ -50,54 +52,30 @@ impl HashAggregateOperator {
 impl Sink for HashAggregateOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
         let num_rows = input.num_rows();
-        let group_by_keys = self
-            .group_by_expr
-            .iter()
-            .map(|(f, _name)| {
-                f.evaluate(input)
-                    .unwrap()
-                    .into_array(input.num_rows())
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
+        let keys_values = self.group_by_expr.iter().map(|(f, _name)| {
+            f.evaluate(input).unwrap()
+                .into_array(input.num_rows()).unwrap()
+        }).collect::<Vec<_>>();
+        let mut hashes_buffer: Vec<u64> = Vec::new();
+        hashes_buffer.resize(num_rows, 0);
+        let hash_values = create_hashes(&keys_values, &self.random_state, &mut hashes_buffer).unwrap();
 
         for row_idx in 0..num_rows {
-            let mut hasher = DefaultHasher::new();
-            for col_idx in 0..group_by_keys.len() {
-                match group_by_keys[col_idx].data_type() {
-                    DataType::Int32 => {
-                        let col: &Int32Array =
-                            group_by_keys[col_idx].as_any().downcast_ref().unwrap();
-                        let value = col.value(row_idx);
-                        hasher.write_i32(value);
-                    }
-                    DataType::Utf8 => {
-                        let col: &GenericByteArray<Utf8Type> =
-                            group_by_keys[col_idx].as_any().downcast_ref().unwrap();
-                        let value = col.value(row_idx);
-                        hasher.write(value.as_bytes());
-                    }
-                    _ => {
-                        todo!();
-                    }
-                }
-            }
-
             //grab the hash which is the key
-            let group_by_key = hasher.finish();
+            let hashmap_key = hash_values[row_idx];
             // the value in the hash table is the row_id
-            let hash_value = (self.originals_counter + row_idx) as u64;
+            let hashmap_value = (self.originals_counter + row_idx) as u64;
 
             //if the key does not exist create a new array
-            if !self.hash_table.contains_key(&group_by_key) {
-                self.hash_table.insert(group_by_key, vec![hash_value]);
+            if !self.hash_table.contains_key(&hashmap_key) {
+                self.hash_table.insert(hashmap_key, vec![hashmap_value]);
             } else {
                 //else if the key already exists in the map then just append the value to the
                 //existing vector
                 self.hash_table
-                    .get_mut(&group_by_key)
+                    .get_mut(&hashmap_key)
                     .unwrap()
-                    .push(hash_value);
+                    .push(hashmap_value);
             }
         }
 
