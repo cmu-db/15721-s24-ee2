@@ -1,4 +1,4 @@
-use crate::common::enums::operator_result_type::{SinkResultType};
+use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::Array;
@@ -7,8 +7,13 @@ use datafusion::arrow::compute;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, Utf8Type};
 use datafusion::physical_expr::{AggregateExpr, PhysicalExpr};
 use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hasher};
+
 use std::sync::Arc;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    num::NonZeroUsize,
+};
 
 pub struct AggregatedData {
     pub data: Option<RecordBatch>,
