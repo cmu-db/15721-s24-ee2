@@ -2,6 +2,7 @@ use crate::common::enums::operator_result_type::{
     OperatorResultType, SinkResultType, SourceResultType,
 };
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::helper::Entry;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
 use std::any::Any;
@@ -24,7 +25,7 @@ pub trait Sink: PhysicalOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType;
     fn as_any(&self) -> &dyn Any;
 
-    fn finalize(&mut self);
+    fn finalize(&mut self) -> Entry;
 }
 
 //Operators that implement Source trait produces data

@@ -1,13 +1,12 @@
+use ahash::HashMap;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::vec;
-use ahash::HashMap;
 // This file contains some helper functions for tpch queries
-use datafusion::arrow::datatypes::{DataType, Field, Schema};
-use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
-use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
+use crate::operator::hash_join::{HashJoinBuildOperator, JoinLeftData};
+use crate::operator::placeholder::PlaceholderOperator;
 use crate::operator::projection::ProjectionOperator;
 use crate::operator::scan::{ScanIntermediatesOperator, ScanOperator};
 use crate::operator::sort::SortOperator;
@@ -15,8 +14,10 @@ use crate::parallel::pipeline::Pipeline;
 use crate::physical_operator::{IntermediateOperator, Sink, Source};
 use ahash::HashMapExt;
 use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::physical_plan::aggregates::AggregateMode;
-use crate::operator::placeholder::PlaceholderOperator;
+use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
+use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -27,7 +28,7 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("c_address", DataType::Utf8, false),
             Field::new("c_nationkey", DataType::Int32, false),
             Field::new("c_phone", DataType::Utf8, false),
-            Field::new("c_acctbal", DataType::Decimal128(15,2), false),
+            Field::new("c_acctbal", DataType::Decimal128(15, 2), false),
             Field::new("c_mktsegment", DataType::Utf8, false),
             Field::new("c_comment", DataType::Utf8, false),
         ]),
@@ -37,18 +38,18 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("l_partkey", DataType::Int32, false),
             Field::new("l_suppkey", DataType::Int32, false),
             Field::new("l_linenumber", DataType::Int32, false),
-            Field::new("l_quantity", DataType::Decimal128(15,2), false),
-            Field::new("l_extendedprice", DataType::Decimal128(15,2), false),
-            Field::new("l_discount", DataType::Decimal128(15,2), false),
-            Field::new("l_tax", DataType::Decimal128(15,2), false),
-            Field::new("l_returnflag", DataType::Utf8,false),
-            Field::new("l_linestatus", DataType::Utf8,false),
-            Field::new("l_shipdate", DataType::Date32,false),
-            Field::new("l_commitdate", DataType::Date32,false),
-            Field::new("l_receiptdate", DataType::Date32,false),
-            Field::new("l_shipinstruct", DataType::Utf8,false),
-            Field::new("l_shipmode", DataType::Utf8,false),
-            Field::new("l_comment", DataType::Utf8,false),
+            Field::new("l_quantity", DataType::Decimal128(15, 2), false),
+            Field::new("l_extendedprice", DataType::Decimal128(15, 2), false),
+            Field::new("l_discount", DataType::Decimal128(15, 2), false),
+            Field::new("l_tax", DataType::Decimal128(15, 2), false),
+            Field::new("l_returnflag", DataType::Utf8, false),
+            Field::new("l_linestatus", DataType::Utf8, false),
+            Field::new("l_shipdate", DataType::Date32, false),
+            Field::new("l_commitdate", DataType::Date32, false),
+            Field::new("l_receiptdate", DataType::Date32, false),
+            Field::new("l_shipinstruct", DataType::Utf8, false),
+            Field::new("l_shipmode", DataType::Utf8, false),
+            Field::new("l_comment", DataType::Utf8, false),
         ]),
 
         "nation" => Schema::new(vec![
@@ -62,7 +63,7 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("o_orderkey", DataType::Int32, false),
             Field::new("o_custkey", DataType::Int32, false),
             Field::new("o_orderstatus", DataType::Utf8, false),
-            Field::new("o_totalprice", DataType::Decimal128(15,2), false),
+            Field::new("o_totalprice", DataType::Decimal128(15, 2), false),
             Field::new("o_orderdate", DataType::Date32, false),
             Field::new("o_priority", DataType::Utf8, false),
             Field::new("o_clerk", DataType::Utf8, false),
@@ -78,7 +79,7 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("p_type", DataType::Utf8, false),
             Field::new("p_size", DataType::Int32, false),
             Field::new("p_container", DataType::Utf8, false),
-            Field::new("p_retailprice", DataType::Decimal128(15,2), false),
+            Field::new("p_retailprice", DataType::Decimal128(15, 2), false),
             Field::new("p_comment", DataType::Utf8, false),
         ]),
 
@@ -86,7 +87,7 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("ps_partkey", DataType::Int32, false),
             Field::new("ps_suppkey", DataType::Int32, false),
             Field::new("ps_availqty", DataType::Int32, false),
-            Field::new("ps_supplycost", DataType::Decimal128(15,2), false),
+            Field::new("ps_supplycost", DataType::Decimal128(15, 2), false),
             Field::new("ps_comment", DataType::Utf8, false),
         ]),
 
@@ -102,7 +103,7 @@ pub fn tpch_schema(table: &str) -> Schema {
             Field::new("s_address", DataType::Utf8, false),
             Field::new("s_nationkey", DataType::Int32, false),
             Field::new("s_phone", DataType::Utf8, false),
-            Field::new("s_acctbal", DataType::Decimal128(15,2), false),
+            Field::new("s_acctbal", DataType::Decimal128(15, 2), false),
             Field::new("s_comment", DataType::Utf8, false),
         ]),
         _ => {
@@ -110,26 +111,32 @@ pub fn tpch_schema(table: &str) -> Schema {
         }
     }
 }
+//the entries coming from different operators for store
+pub enum Entry {
+    batch(Vec<RecordBatch>),
+    hash_map(JoinLeftData),
+    empty,
+}
+
 pub struct PhysicalToPhysicalVisitor {
     pub pipelines: Vec<Pipeline>,
-    pub current_pipeline : usize ,
-    pub store : Arc<RefCell<HashMap<usize, Option<RecordBatch>>>>,
+    pub current_pipeline: usize,
+    pub store: Arc<RefCell<HashMap<usize, Entry>>>,
 }
 impl PhysicalToPhysicalVisitor {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         PhysicalToPhysicalVisitor {
-            pipelines : vec![],
-            current_pipeline : 0,
-            store : Arc::new(RefCell::new(HashMap::new())),
+            pipelines: vec![],
+            current_pipeline: 0,
+            store: Arc::new(RefCell::new(HashMap::new())),
         }
     }
 }
 
-
-impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor{
+impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
     type Error = ();
     fn pre_visit(&mut self, _plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
-       Ok(true)
+        Ok(true)
     }
 
     fn post_visit(&mut self, plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
@@ -197,7 +204,18 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor{
 
         }
         else if let Some(_hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
-            println!("Visiting a hash_join");
+            println!("visiting join");
+            // let mut build_expr = Vec::new();
+            // let mut probe_expr = Vec::new();
+            // for expr in hash_join.on(){
+            //    build_expr.push(expr.0.clone());
+            //    probe_expr.push(expr.1.clone());
+            // }
+            // let hash_build: Box<dyn Sink> = Box::new(HashJoinBuildOperator::new(build_expr, hash_join.schema()));
+            //
+            // // let probe_build
+            // self.pipelines.last_mut().unwrap().sink_operator = Some(hash_build);
+
         }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::sorts::sort::SortExec>(){
             let sort_expr  : Vec<_> = operator.expr().iter().cloned().collect();

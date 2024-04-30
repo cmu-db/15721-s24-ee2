@@ -1,5 +1,6 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
@@ -61,7 +62,9 @@ impl Sink for LimitOperator {
         self
     }
 
-    fn finalize(&mut self) {}
+    fn finalize(&mut self) -> Entry {
+        Entry::batch(std::mem::take(&mut self.data.originals))
+    }
 }
 
 impl PhysicalOperator for LimitOperator {

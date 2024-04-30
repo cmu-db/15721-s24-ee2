@@ -1,29 +1,34 @@
-use std::cell::RefCell;
 use crate::common::enums::operator_result_type::SourceResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Source};
+use ahash::HashMap;
 use datafusion::arrow::array::{AsArray, BooleanArray, RecordBatch};
 use datafusion::arrow::compute::can_cast_types;
 use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use datafusion::arrow::error::ArrowError;
 use datafusion::parquet::arrow::arrow_reader::{
-    ArrowPredicate, ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder, RowFilter
+    ArrowPredicate, ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder, RowFilter,
 };
 use datafusion::parquet::arrow::ProjectionMask;
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::utils::reassign_predicate_columns;
 use datafusion::physical_plan::PhysicalExpr;
-use std::collections::{BTreeSet, HashMap};
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::sync::Arc;
-use ahash::RandomState;
 
 pub struct ScanOperator {
     reader: ParquetRecordBatchReader,
-    pub projected_schema: SchemaRef
+    pub projected_schema: SchemaRef,
 }
 impl ScanOperator {
-    pub fn new(file_path: &str, projected_schema: SchemaRef, predicate: Option<Arc<dyn PhysicalExpr>>) -> ScanOperator {
+    pub fn new(
+        file_path: &str,
+        projected_schema: SchemaRef,
+        predicate: Option<Arc<dyn PhysicalExpr>>,
+    ) -> ScanOperator {
         let file = File::open(&file_path).unwrap();
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
 
@@ -33,8 +38,12 @@ impl ScanOperator {
         for (file_idx, file_field) in file_schema.fields().iter().enumerate() {
             if let Some((_, table_field)) = projected_schema.fields().find(file_field.name()) {
                 match can_cast_types(file_field.data_type(), table_field.data_type()) {
-                    true => {project_schema_indices.push(file_idx);}
-                    false => {assert!(false);} // Projection type mismatch
+                    true => {
+                        project_schema_indices.push(file_idx);
+                    }
+                    false => {
+                        assert!(false);
+                    } // Projection type mismatch
                 }
             }
         }
@@ -49,7 +58,11 @@ impl ScanOperator {
                 required_column_indices_of_expr(file_schema, expr, &mut project_indices_set);
                 let project_indices = project_indices_set.into_iter().collect();
                 let filter = MyArrowPredicate::try_new(
-                    expr.clone(), project_indices, file_schema, builder.metadata());
+                    expr.clone(),
+                    project_indices,
+                    file_schema,
+                    builder.metadata(),
+                );
                 filters.push(Box::new(filter));
             }
             builder = builder.with_row_filter(RowFilter::new(filters));
@@ -58,10 +71,9 @@ impl ScanOperator {
         let reader = builder.with_projection(mask).build().unwrap();
         ScanOperator {
             reader,
-            projected_schema
+            projected_schema,
         }
     }
-
 }
 
 impl Source for ScanOperator {
@@ -115,21 +127,21 @@ impl MyArrowPredicate {
             projection,
             projection_mask: ProjectionMask::roots(
                 metadata.file_metadata().schema_descr(),
-                project_indices
-            )
+                project_indices,
+            ),
         }
     }
 
     fn remap_projection(src: &[usize]) -> Vec<usize> {
         let len = src.len();
-    
+
         // Compute the column mapping from projected order to file order
         // i.e. the indices required to sort projected schema into the file schema
         //
         // e.g. projection: [5, 9, 0] -> [2, 0, 1]
         let mut sorted_indexes: Vec<_> = (0..len).collect();
         sorted_indexes.sort_unstable_by_key(|x| src[*x]);
-    
+
         // Compute the mapping from schema order to projected order
         // i.e. the indices required to sort file schema into the projected schema
         //
@@ -171,12 +183,18 @@ impl ArrowPredicate for MyArrowPredicate {
     }
 }
 
-fn required_column_indices_of_expr(file_schema: &SchemaRef, node: &Arc<dyn PhysicalExpr>, indices: &mut BTreeSet<usize>) {
-    if let Some(column) = node.as_any().downcast_ref::<datafusion::physical_plan::expressions::Column>() {
+fn required_column_indices_of_expr(
+    file_schema: &SchemaRef,
+    node: &Arc<dyn PhysicalExpr>,
+    indices: &mut BTreeSet<usize>,
+) {
+    if let Some(column) = node
+        .as_any()
+        .downcast_ref::<datafusion::physical_plan::expressions::Column>()
+    {
         if let Ok(idx) = file_schema.index_of(column.name()) {
             indices.insert(idx);
-        }
-        else {
+        } else {
             panic!();
         }
     }
@@ -185,25 +203,25 @@ fn required_column_indices_of_expr(file_schema: &SchemaRef, node: &Arc<dyn Physi
     }
 }
 
-pub struct ScanIntermediatesOperator{
-    pub schema : SchemaRef,
-    pub uuid : usize,
-    pub store : Arc<RefCell<HashMap<usize, Option<RecordBatch>, RandomState>>>,
-    pub state : Option<bool>,
+pub struct ScanIntermediatesOperator {
+    pub schema: SchemaRef,
+    pub uuid: usize,
+    pub store: Arc<RefCell<HashMap<usize, Entry>>>,
+    entry: Entry,
 }
 
 impl ScanIntermediatesOperator {
-    pub fn new(uuid : usize, schema : SchemaRef, store : Arc<RefCell<HashMap<usize, Option<RecordBatch>, RandomState>>>)->Self {
-        Self{
+    pub fn new(uuid: usize, schema: SchemaRef, store: Arc<RefCell<HashMap<usize, Entry>>>) -> Self {
+        Self {
             uuid,
             schema,
             store,
-            state : None,
+            entry: Entry::empty,
         }
     }
 }
 
-impl PhysicalOperator for ScanIntermediatesOperator{
+impl PhysicalOperator for ScanIntermediatesOperator {
     fn schema(&self) -> Arc<Schema> {
         self.schema.clone()
     }
@@ -212,20 +230,26 @@ impl PhysicalOperator for ScanIntermediatesOperator{
     }
 }
 
-impl Source for ScanIntermediatesOperator{
+impl Source for ScanIntermediatesOperator {
     fn get_data(&mut self) -> SourceResultType {
-        if let Some(state) = self.state {
-            return SourceResultType::Finished;
-        }
-        else {
-            let mut binding = self.store.borrow_mut();
-            let entry = binding.remove(&self.uuid).unwrap();
-            if let Some(batch) = entry {
-                self.state = Some(true);
-                return SourceResultType::HaveMoreOutput(Arc::new(batch));
-            } else {
-                return SourceResultType::Finished;
+        match &mut self.entry {
+            Entry::batch(_) => {}
+            Entry::empty => {
+                let mut binding = self.store.borrow_mut();
+                self.entry = binding.remove(&self.uuid).unwrap();
             }
+            _ => panic!("bug"),
+        }
+        if let Entry::batch(ref mut batch) = self.entry {
+            let b = batch.pop();
+            match b {
+                None => SourceResultType::Finished,
+                Some(batch) => {
+                    return SourceResultType::HaveMoreOutput(Arc::new(batch));
+                }
+            }
+        } else {
+            panic!("Bug in source operator")
         }
     }
 }

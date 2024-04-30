@@ -50,7 +50,7 @@ impl IntermediateOperator for ProjectionOperator {
 
 impl PhysicalOperator for ProjectionOperator {
     fn schema(&self) -> Arc<Schema> {
-       Arc::new(self.output_schema.clone())
+        Arc::new(self.output_schema.clone())
     }
 
     fn get_type(&self) -> PhysicalOperatorType {

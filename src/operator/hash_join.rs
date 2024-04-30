@@ -9,6 +9,7 @@ use datafusion::physical_plan::PhysicalExpr;
 
 use crate::common::enums::operator_result_type::{OperatorResultType, SinkResultType};
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::helper::Entry;
 use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink};
 use datafusion::arrow::compute;
 use std::collections::hash_map::DefaultHasher;
@@ -97,7 +98,14 @@ impl Sink for HashJoinBuildOperator {
         self
     }
 
-    fn finalize(&mut self) {}
+    fn finalize(&mut self) -> Entry {
+        let join_left_data = JoinLeftData {
+            hash_table: std::mem::take(&mut self.hash_table),
+            schema: self.schema.clone(),
+            originals: std::mem::take(&mut self.originals),
+        };
+        Entry::hash_map(join_left_data)
+    }
 }
 
 pub struct HashJoinProbeOperator {

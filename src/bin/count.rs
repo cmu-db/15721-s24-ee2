@@ -6,13 +6,13 @@ use datafusion::logical_expr::col;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_plan::aggregates::create_aggregate_expr;
 use datafusion::physical_plan::aggregates::AggregateFunction;
+use ee2::helper::tpch_schema;
 use ee2::operator::hash_aggregate::HashAggregateOperator;
 use ee2::operator::scan::ScanOperator;
 use ee2::parallel::pipeline::Pipeline;
 use ee2::physical_operator::{Sink, Source};
 use std::sync::Arc;
 use std::vec;
-use ee2::helper::tpch_schema;
 
 fn main() {
     let schema = tpch_schema("customer");

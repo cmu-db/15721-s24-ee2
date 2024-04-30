@@ -9,12 +9,15 @@ use std::sync::Arc;
 
 pub struct FilterOperator {
     expression: Arc<dyn PhysicalExpr>,
-    schema: Arc<Schema>
+    schema: Arc<Schema>,
 }
 
 impl FilterOperator {
     pub fn new(expression: Arc<dyn PhysicalExpr>, schema: Arc<Schema>) -> Self {
-        FilterOperator { expression, schema: schema.clone() }
+        FilterOperator {
+            expression,
+            schema: schema.clone(),
+        }
     }
 }
 

@@ -1,10 +1,13 @@
 use crate::common::enums::operator_result_type::{
     OperatorResultType, SinkResultType, SourceResultType,
 };
-use crate::physical_operator::{IntermediateOperator, Sink, Source};
-use datafusion::arrow::array::RecordBatch;
-use std::sync::Arc;
 use crate::common::enums::physical_operator_type::physical_operator_to_string;
+use crate::helper::Entry;
+use crate::physical_operator::{IntermediateOperator, Sink, Source};
+use ahash::HashMap;
+use datafusion::arrow::array::RecordBatch;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 pub struct Pipeline {
     pub source_operator: Option<Box<dyn Source>>,
@@ -21,28 +24,28 @@ impl Pipeline {
         }
     }
 
-    pub fn print(&self){
+    pub fn print(&self) {
         match &self.source_operator {
             None => {}
             Some(source) => {
                 let op = physical_operator_to_string(&source.get_type());
-                println!("source is {}",op);
+                println!("source is {}", op);
             }
         }
-        for op in &self.operators{
+        for op in &self.operators {
             let op = physical_operator_to_string(&op.get_type());
-            println!("Intermediate operator is {}",op);
+            println!("Intermediate operator is {}", op);
         }
-        match &self.sink_operator{
+        match &self.sink_operator {
             None => {}
             Some(sink) => {
                 let op = physical_operator_to_string(&sink.get_type());
-                println!("Sink is {}",op);
+                println!("Sink is {}", op);
             }
         }
     }
 
-    pub fn execute(&mut self) {
+    pub fn execute(&mut self, pipeline_number: usize, store: Arc<RefCell<HashMap<usize, Entry>>>) {
         struct StackEntry {
             index: usize,
             input: Arc<RecordBatch>,
@@ -50,7 +53,7 @@ impl Pipeline {
 
         let mut stack: Vec<StackEntry> = Vec::new();
 
-        loop {
+        'outer: loop {
             let source_operator = self.source_operator.as_mut().unwrap();
             let source_result = source_operator.get_data();
             match source_result {
@@ -77,7 +80,7 @@ impl Pipeline {
                     match res {
                         SinkResultType::NeedMoreInput => {}
                         SinkResultType::Finished => {
-                            return;
+                            break 'outer;
                         }
                     }
                 } else {
@@ -101,6 +104,7 @@ impl Pipeline {
                 }
             }
         }
-        self.sink_operator.as_mut().unwrap().finalize();
+        let entry = self.sink_operator.as_mut().unwrap().finalize();
+        store.borrow_mut().insert(pipeline_number, entry);
     }
 }

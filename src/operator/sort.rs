@@ -1,5 +1,6 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::compute;
@@ -9,11 +10,7 @@ use datafusion::arrow::datatypes::Schema;
 use datafusion::physical_expr::PhysicalSortExpr;
 use std::sync::Arc;
 
-pub struct SortedData {
-    pub data: Option<RecordBatch>,
-}
 pub struct SortOperator {
-    pub sorted_data: SortedData,
     expr: Vec<PhysicalSortExpr>,
     originals: Vec<RecordBatch>,
 }
@@ -21,7 +18,6 @@ pub struct SortOperator {
 impl SortOperator {
     pub fn new(expr: Vec<PhysicalSortExpr>) -> Self {
         Self {
-            sorted_data: SortedData { data: None },
             expr,
             originals: Vec::new(),
         }
@@ -38,7 +34,7 @@ impl Sink for SortOperator {
         self
     }
 
-    fn finalize(&mut self) {
+    fn finalize(&mut self) -> Entry {
         let combined =
             compute::concat_batches(&self.originals[0].schema(), self.originals.iter()).unwrap();
 
@@ -58,7 +54,7 @@ impl Sink for SortOperator {
             .unwrap();
 
         let new_batch = RecordBatch::try_new(combined.schema(), columns).unwrap();
-        self.sorted_data.data = Some(new_batch);
+        Entry::batch(vec![new_batch])
     }
 }
 
