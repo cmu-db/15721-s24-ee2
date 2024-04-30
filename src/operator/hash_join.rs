@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::vec;
+use ahash;
 
 use datafusion::arrow::array::{Array, Int32Array, RecordBatch, UInt64Array};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
@@ -13,11 +15,10 @@ use crate::helper::Entry;
 use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink};
 use datafusion::arrow::compute;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 
 pub struct JoinLeftData {
     pub hash_table: HashMap<u64, Vec<u64>>,
-    pub schema: Arc<Schema>,
     pub originals: Vec<RecordBatch>,
 }
 
@@ -101,7 +102,6 @@ impl Sink for HashJoinBuildOperator {
     fn finalize(&mut self) -> Entry {
         let join_left_data = JoinLeftData {
             hash_table: std::mem::take(&mut self.hash_table),
-            schema: self.schema.clone(),
             originals: std::mem::take(&mut self.originals),
         };
         Entry::hash_map(join_left_data)
@@ -111,22 +111,24 @@ impl Sink for HashJoinBuildOperator {
 pub struct HashJoinProbeOperator {
     expr: Vec<Arc<dyn PhysicalExpr>>,
     schema: Arc<Schema>,
-    join_left_data: JoinLeftData,
+    left_side_schema: Arc<Schema>,
     output_schema: Arc<Schema>,
+    store : Arc<RefCell<ahash::HashMap<usize, Entry>>>,
+    uuid : usize,
+    join_left_data : Entry,
 }
 
 impl HashJoinProbeOperator {
     pub fn new(
         expr: Vec<Arc<dyn PhysicalExpr>>,
         schema: Arc<Schema>,
-        join_left_data: JoinLeftData,
+        left_side_schema : Arc<Schema>,
+        store : Arc<RefCell<ahash::HashMap<usize,Entry>>>,
+        uuid : usize,
     ) -> Self {
-        //let output_schema = Arc::new(Schema::try_merge(
-        //	vec![*join_left_data.schema, *schema]
-        //).unwrap());
-        let num_output_fields = join_left_data.schema.fields.len() + schema.fields().len();
+        let num_output_fields = left_side_schema.fields.len() + schema.fields().len();
         let mut fields: Vec<Field> = Vec::with_capacity(num_output_fields);
-        for f in join_left_data.schema.fields() {
+        for f in left_side_schema.fields() {
             fields.push(f.deref().clone());
         }
         for f in schema.fields() {
@@ -136,8 +138,11 @@ impl HashJoinProbeOperator {
         HashJoinProbeOperator {
             expr,
             schema,
-            join_left_data,
+            left_side_schema,
             output_schema,
+            store,
+            uuid,
+            join_left_data : Entry::empty,
         }
     }
 }
@@ -156,9 +161,21 @@ impl IntermediateOperator for HashJoinProbeOperator {
             })
             .collect::<Vec<_>>();
 
+        match &self.join_left_data {
+            Entry::empty => {
+                self.join_left_data = self.store.borrow_mut().remove(&self.uuid).unwrap();
+            }
+            _=> {}
+        }
+
+        let data = match &self.join_left_data {
+            Entry::hash_map(data) => {data}
+            _ => {panic!()}
+        };
+
         let left_large_batch = compute::concat_batches(
-            &self.join_left_data.schema,
-            self.join_left_data.originals.iter(),
+            &self.left_side_schema,
+            data.originals.iter(),
         )
         .unwrap();
 
@@ -178,8 +195,9 @@ impl IntermediateOperator for HashJoinProbeOperator {
                     }
                 }
             }
+            let hash_table = &data.hash_table;
             let hash_key = hasher.finish();
-            match self.join_left_data.hash_table.get(&hash_key) {
+            match hash_table.get(&hash_key) {
                 Some(left_row_idxs) => {
                     for left_row_idx in left_row_idxs {
                         // TODO
@@ -213,7 +231,7 @@ impl IntermediateOperator for HashJoinProbeOperator {
 
 impl PhysicalOperator for HashJoinProbeOperator {
     fn schema(&self) -> Arc<Schema> {
-        Arc::clone(&self.schema)
+        Arc::clone(&self.output_schema)
     }
 
     fn get_type(&self) -> PhysicalOperatorType {

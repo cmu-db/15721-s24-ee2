@@ -5,7 +5,7 @@ use std::vec;
 // This file contains some helper functions for tpch queries
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
-use crate::operator::hash_join::{HashJoinBuildOperator, JoinLeftData};
+use crate::operator::hash_join::{HashJoinBuildOperator, HashJoinProbeOperator, JoinLeftData};
 use crate::operator::placeholder::PlaceholderOperator;
 use crate::operator::projection::ProjectionOperator;
 use crate::operator::scan::{ScanIntermediatesOperator, ScanOperator};
@@ -121,15 +121,17 @@ pub enum Entry {
 
 pub struct PhysicalToPhysicalVisitor {
     pub pipelines: Vec<Pipeline>,
-    pub current_pipeline: usize,
+    pub next_pipeline_number: usize,
     pub store: Arc<RefCell<HashMap<usize, Entry>>>,
+    pub stack : Vec<usize>,
 }
 impl PhysicalToPhysicalVisitor {
     pub fn new() -> Self {
         PhysicalToPhysicalVisitor {
             pipelines: vec![],
-            current_pipeline: 0,
+            next_pipeline_number: 0,
             store: Arc::new(RefCell::new(HashMap::new())),
+            stack : vec![],
         }
     }
 }
@@ -152,6 +154,8 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let scan = Some(scan);
             self.pipelines.push(Pipeline::new());
             self.pipelines.last_mut().unwrap().source_operator = scan;
+            self.stack.push(self.next_pipeline_number);
+            self.next_pipeline_number +=1;
         }
         else if let Some(filter)  = node.downcast_ref::<datafusion::physical_plan::filter::FilterExec>(){
             let predicate = filter.predicate().clone();
@@ -199,24 +203,40 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             self.pipelines.last_mut().unwrap().sink_operator = Some(aggregate_op);
 
             self.pipelines.push(Pipeline::new());
-            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
-            self.current_pipeline+=1;
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.next_pipeline_number-1, operator.schema(), Arc::clone(&self.store)));
+            self.stack.pop().unwrap();
+            self.stack.push(self.next_pipeline_number);
+            self.next_pipeline_number +=1;
             self.pipelines.last_mut().unwrap().source_operator = Some(scan);
 
         }
-        else if let Some(_hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
-            println!("visiting join");
-            // let mut build_expr = Vec::new();
-            // let mut probe_expr = Vec::new();
-            // for expr in hash_join.on(){
-            //    build_expr.push(expr.0.clone());
-            //    probe_expr.push(expr.1.clone());
-            // }
-            // let hash_build: Box<dyn Sink> = Box::new(HashJoinBuildOperator::new(build_expr, hash_join.schema()));
-            //
-            // // let probe_build
-            // self.pipelines.last_mut().unwrap().sink_operator = Some(hash_build);
+        else if let Some(hash_join)  = node.downcast_ref::<datafusion::physical_plan::joins::HashJoinExec>(){
+            let mut build_expr = Vec::new();
+            let mut probe_expr = Vec::new();
+            for expr in hash_join.on(){
+               build_expr.push(expr.0.clone());
+               probe_expr.push(expr.1.clone());
+            }
+            let current = self.stack.pop().unwrap();
+            let build_side_num = self.stack.pop().unwrap();
+            self.stack.push(current);
 
+
+            let hash_build: Box<dyn Sink> = Box::new(HashJoinBuildOperator::new(build_expr, hash_join.left.schema()));
+            self.pipelines[build_side_num].sink_operator = Some(hash_build);
+
+
+            let schema = match &self.pipelines.last().unwrap().operators.last() {
+                None => {
+                    self.pipelines.last().unwrap().source_operator.as_ref().unwrap().as_ref().schema()
+                }
+                Some(opearator) => {
+                    opearator.schema()
+                }
+            };
+
+            let hash_probe_operator: Box<dyn IntermediateOperator> = Box::new(HashJoinProbeOperator::new(probe_expr,hash_join.right.schema(), hash_join.left.schema(), Arc::clone(&self.store), build_side_num));
+            self.pipelines.last_mut().unwrap().operators.push(hash_probe_operator);
         }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::sorts::sort::SortExec>(){
             let sort_expr  : Vec<_> = operator.expr().iter().cloned().collect();
@@ -224,8 +244,10 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             self.pipelines.last_mut().unwrap().sink_operator = Some(sort);
 
             self.pipelines.push(Pipeline::new());
-            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
-            self.current_pipeline+=1;
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.next_pipeline_number-1, operator.schema(), Arc::clone(&self.store)));
+            self.stack.pop().unwrap();
+            self.stack.push(self.next_pipeline_number);
+            self.next_pipeline_number +=1;
             self.pipelines.last_mut().unwrap().source_operator = Some(scan);
         }
 
@@ -235,6 +257,8 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let placeholer = Some(placeholer);
             self.pipelines.push(Pipeline::new());
             self.pipelines.last_mut().unwrap().source_operator = placeholer;
+            self.stack.push(self.next_pipeline_number);
+            self.next_pipeline_number +=1;
         }
         else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::limit::GlobalLimitExec>(){
             let num_fetch = operator.fetch().unwrap();
@@ -242,8 +266,10 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             self.pipelines.last_mut().unwrap().sink_operator = Some(limit);
 
             self.pipelines.push(Pipeline::new());
-            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
-            self.current_pipeline+=1;
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.next_pipeline_number-1, operator.schema(), Arc::clone(&self.store)));
+            self.stack.pop().unwrap();
+            self.stack.push(self.next_pipeline_number);
+            self.next_pipeline_number +=1;
             self.pipelines.last_mut().unwrap().source_operator = Some(scan);
         }
 

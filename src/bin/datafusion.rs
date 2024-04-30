@@ -92,7 +92,7 @@ async fn main() {
             }
         }
         let plan = df.create_physical_plan().await.unwrap();
-        //println!("Physical plan : {:#?}", plan);
+        // println!("Physical plan : {:#?}", plan);
 
         let mut visitor = helper::PhysicalToPhysicalVisitor::new();
         let _ = accept(plan.as_ref(), &mut visitor);
