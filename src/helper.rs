@@ -18,6 +18,7 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::physical_plan::aggregates::AggregateMode;
 use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
+use crate::operator::limit::LimitOperator;
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -235,6 +236,17 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             self.pipelines.push(Pipeline::new());
             self.pipelines.last_mut().unwrap().source_operator = placeholer;
         }
+        else if let Some(operator)  = node.downcast_ref::<datafusion::physical_plan::limit::GlobalLimitExec>(){
+            let num_fetch = operator.fetch().unwrap();
+            let limit : Box <dyn Sink> = Box::new(LimitOperator::new(num_fetch));
+            self.pipelines.last_mut().unwrap().sink_operator = Some(limit);
+
+            self.pipelines.push(Pipeline::new());
+            let scan : Box <dyn Source> = Box::new(ScanIntermediatesOperator::new(self.current_pipeline, operator.schema(), Arc::clone(&self.store)));
+            self.current_pipeline+=1;
+            self.pipelines.last_mut().unwrap().source_operator = Some(scan);
+        }
+
         else {
             println!("node is {:#?}",plan);
             panic!("Visit not implemented for this node");

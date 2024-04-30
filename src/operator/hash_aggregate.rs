@@ -208,7 +208,7 @@ impl Sink for HashAggregateOperator {
             columns.push(output_col);
         }
 
-        let batch = (RecordBatch::try_new(self.out_schema.clone(), columns).unwrap());
+        let batch = RecordBatch::try_new(self.out_schema.clone(), columns).unwrap();
         Entry::batch(vec![batch])
     }
 }
