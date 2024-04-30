@@ -5,6 +5,7 @@ use datafusion::prelude::{ParquetReadOptions, SessionConfig, SessionContext};
 use datafusion::scalar::ScalarValue;
 use ee2::helper;
 use ee2::operator::physical_batch_collector::PhysicalBatchCollector;
+use ee2::physical_operator::Sink;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
@@ -85,10 +86,18 @@ async fn main() {
         let _ = std::io::stdin().read_line(&mut sql).unwrap();
 
         //remove whitespace
-        let mut sql = String::from(sql.trim_start());
-        let mut sql = String::from(sql.trim_end());
-        let mut sql = String::from(sql.trim_end_matches('\n'));
+        let sql = String::from(sql.trim_start());
+        let sql = String::from(sql.trim_end());
+        let sql = String::from(sql.trim_end_matches('\n'));
         let mut sql = String::from(sql.trim_end_matches(';'));
+
+        // native mode
+        let mut native_mode = false;
+        if sql.as_str().starts_with("native ") {
+            native_mode = true;
+            sql = String::from(&sql[7..]);
+            sql = String::from(sql.trim_start());
+        }
 
         if sql.as_str().starts_with("tpch"){
             sql = execute_tpch_query(sql) ;
@@ -105,6 +114,19 @@ async fn main() {
         }
         let plan = df.create_physical_plan().await.unwrap();
         // println!("Physical plan : {:#?}", plan);
+
+        if native_mode {
+            let start = Instant::now();
+            let result = datafusion::physical_plan::collect(plan, ctx.task_ctx()).await.unwrap();
+            let duration = start.elapsed();
+            let mut printer = PhysicalBatchCollector::new();
+            for batch in result {
+                printer.sink(&Arc::new(batch));
+            }
+            printer.print();
+            println!("Duration of query is {:?} (datafusion native mode)", duration);
+            continue;
+        }
 
         let mut visitor = helper::PhysicalToPhysicalVisitor::new();
         let _ = accept(plan.as_ref(), &mut visitor);

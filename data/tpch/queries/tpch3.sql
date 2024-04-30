@@ -1,4 +1,4 @@
-query = SELECT
+SELECT
             l_orderkey,
             sum(l_extendedprice * (1 - l_discount)) AS revenue,
             o_orderdate,
