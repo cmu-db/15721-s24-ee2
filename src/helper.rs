@@ -225,16 +225,6 @@ impl ExecutionPlanVisitor for PhysicalToPhysicalVisitor {
             let hash_build: Box<dyn Sink> = Box::new(HashJoinBuildOperator::new(build_expr, hash_join.left.schema()));
             self.pipelines[build_side_num].sink_operator = Some(hash_build);
 
-
-            let schema = match &self.pipelines.last().unwrap().operators.last() {
-                None => {
-                    self.pipelines.last().unwrap().source_operator.as_ref().unwrap().as_ref().schema()
-                }
-                Some(opearator) => {
-                    opearator.schema()
-                }
-            };
-
             let hash_probe_operator: Box<dyn IntermediateOperator> = Box::new(HashJoinProbeOperator::new(probe_expr,hash_join.right.schema(), hash_join.left.schema(), Arc::clone(&self.store), build_side_num));
             self.pipelines.last_mut().unwrap().operators.push(hash_probe_operator);
         }
