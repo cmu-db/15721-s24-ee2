@@ -1,3 +1,5 @@
+use std::fmt::format;
+use std::fs::read_to_string;
 use datafusion::physical_plan::accept;
 use datafusion::prelude::{ParquetReadOptions, SessionConfig, SessionContext};
 use datafusion::scalar::ScalarValue;
@@ -82,6 +84,16 @@ async fn main() {
         io::stdout().flush().unwrap();
         let _ = std::io::stdin().read_line(&mut sql).unwrap();
 
+        //remove whitespace
+        let mut sql = String::from(sql.trim_start());
+        let mut sql = String::from(sql.trim_end());
+        let mut sql = String::from(sql.trim_end_matches('\n'));
+        let mut sql = String::from(sql.trim_end_matches(';'));
+
+        if sql.as_str().starts_with("tpch"){
+            sql = execute_tpch_query(sql) ;
+        }
+
         let res = ctx.sql(sql.as_str()).await;
         let df;
         match res {
@@ -124,4 +136,26 @@ async fn main() {
         }
         println!("Duration of query is {:?}", total_duration);
     }
+}
+
+fn read_lines(filename: &str) -> String {
+    let mut result = Vec::new();
+    for line in read_to_string(filename).unwrap().lines() {
+        let mut str = String::from(line);
+        if str.ends_with("\n"){
+            str.pop();
+        }
+        str.push(' ');
+        result.push(str);
+    }
+    let mut query = String::new();
+    for line in result{
+        query+=line.as_str();
+    }
+
+    query
+}
+
+fn execute_tpch_query(str : String) -> String {
+    read_lines(format!("data/tpch/queries/{}.sql",str.as_str()).as_str())
 }
