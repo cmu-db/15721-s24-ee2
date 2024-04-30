@@ -245,7 +245,7 @@ impl Source for ScanIntermediatesOperator {
             match b {
                 None => SourceResultType::Finished,
                 Some(batch) => {
-                    return SourceResultType::HaveMoreOutput(Arc::new(batch));
+                    return SourceResultType::HaveMoreOutput(batch);
                 }
             }
         } else {

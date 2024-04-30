@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub struct LimitOperator {
     num_records: usize,
     counter: usize,
-    originals: Vec<RecordBatch>,
+    originals: Vec<Arc<RecordBatch>>,
 }
 
 impl LimitOperator {
@@ -39,17 +39,17 @@ impl Sink for LimitOperator {
         if self.counter > self.num_records {
             let remaining_rows = self.num_records - prev_counter;
             let new_batch = input.slice(0, remaining_rows);
-            self.originals.push(new_batch);
+            self.originals.push(Arc::new(new_batch));
             return SinkResultType::Finished;
         }
         //exact num rows don't slice
         else if self.counter == self.num_records {
-            self.originals.push(input.as_ref().clone());
+            self.originals.push(Arc::clone(input));
             return SinkResultType::Finished;
         }
         //we need more input to satisfy the limit
         else {
-            self.originals.push(input.as_ref().clone());
+            self.originals.push(Arc::clone(input));
             return SinkResultType::NeedMoreInput;
         }
     }

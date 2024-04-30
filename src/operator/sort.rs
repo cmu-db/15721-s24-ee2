@@ -54,7 +54,7 @@ impl Sink for SortOperator {
             .unwrap();
 
         let new_batch = RecordBatch::try_new(combined.schema(), columns).unwrap();
-        Entry::batch(vec![new_batch])
+        Entry::batch(vec![Arc::new(new_batch)])
     }
 }
 

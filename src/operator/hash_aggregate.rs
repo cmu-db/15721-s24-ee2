@@ -1,5 +1,6 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::common::row_hashmap::{GroupedRowList,GroupedRowHashMap};
 use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use ahash::random_state::RandomState;
@@ -27,14 +28,11 @@ pub struct HashAggregateOperator {
 
     //Key = hash(col1,col2,col3...)
     //values = row_ids
-    hash_table: HashMap<u64, GroupedRowList>,
+    hash_table: GroupedRowHashMap,
     random_state: RandomState,
 }
 
-struct GroupedRowList {
-    row_lists: Vec<Vec<u64>>,
-    repr_row_id: (usize, u64),
-}
+
 
 impl HashAggregateOperator {
     pub fn new(
@@ -92,22 +90,19 @@ impl Sink for HashAggregateOperator {
 
             //if the key does not exist create a new array
             if !self.hash_table.contains_key(&hashmap_key) {
-                let mut row_lists = Vec::with_capacity(self.batch_id + 1);
-                row_lists.resize(self.batch_id + 1, Vec::new());
-                row_lists[self.batch_id].push(hashmap_value);
+                let mut row_list = Vec::new();
+                row_list.push((self.batch_id, hashmap_value));
                 self.hash_table.insert(
                     hashmap_key,
                     GroupedRowList {
-                        row_lists,
-                        repr_row_id: (self.batch_id, hashmap_value),
+                        row_list
                     },
                 );
             } else {
                 //else if the key already exists in the map then just append the value to the
                 let grouped_row_lists = self.hash_table.get_mut(&hashmap_key).unwrap();
-                let row_lists = &mut grouped_row_lists.row_lists;
-                row_lists.resize(self.batch_id + 1, Vec::new());
-                row_lists[self.batch_id].push(hashmap_value);
+                let row_list = &mut grouped_row_lists.row_list;
+                row_list.push((self.batch_id, hashmap_value));
             }
         }
 
@@ -132,7 +127,7 @@ impl Sink for HashAggregateOperator {
                 .hash_table
                 .iter()
                 .map(|(_, grouped_row_lists)| {
-                    let (batch_id, row_id) = grouped_row_lists.repr_row_id;
+                    let (batch_id, row_id) = grouped_row_lists.row_list[0];
                     self.originals[batch_id].slice(row_id as usize, 1)
                 })
                 .collect::<Vec<_>>();
@@ -149,57 +144,62 @@ impl Sink for HashAggregateOperator {
         }
 
         // aggregate cols
-        let mut accumulators = self
-            .aggregate_expr
-            .iter()
-            .map(|agg_expr| {
-                repeat(0)
-                    .take(num_output_rows)
-                    .map(|_| agg_expr.create_accumulator())
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
+        let num_batches = self.originals.len();
+        // Each agg_expr emits one output column
+        for (agg_id, agg_expr) in self.aggregate_expr.iter().enumerate() {
+            // Create input_cols for each batch
+            let input_exprs = agg_expr.expressions();
+            let mut input_cols = self.originals.iter().map(|batch| {
+                input_exprs.iter().map(|e| {
+                    e.evaluate(batch).and_then(|v| v.into_array(batch.num_rows()))
+                }).collect::<Result<Vec<_>,_>>().unwrap()
+            }).collect::<Vec<_>>();
 
-        for (batch_id, batch) in self.originals.iter().enumerate() {
-            for (agg_id, agg_expr) in self.aggregate_expr.iter().enumerate() {
-                let input_exprs = agg_expr.expressions();
-                let input_cols = input_exprs
-                    .iter()
-                    .map(|e| {
-                        e.evaluate(batch)
-                            .and_then(|v| v.into_array(batch.num_rows()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
+            let mut output_col_vec = Vec::with_capacity(num_output_rows);
+            // Each grouped_row_list emits one output row
+            for (group_id, (_, grouped_row_list)) in self.hash_table.iter().enumerate() {
+                // Create accumulator
+                let mut accumulator = agg_expr.create_accumulator().unwrap();
 
-                for (group_id, (_, grouped_row_lists)) in self.hash_table.iter().enumerate() {
-                    if grouped_row_lists.row_lists.len() <= batch_id {
-                        continue;
+                // Process batch
+                let mut row_list_start_idx: usize = 0;
+                for batch_id in 0..num_batches {
+                    // Calculate list of row_ids for this batch_id from grouped_row_list
+                    let mut row_list = Vec::new();
+                    for idx in row_list_start_idx..(grouped_row_list.row_list.len() + 1) {
+                        if idx == grouped_row_list.row_list.len() {
+                            row_list_start_idx = idx;
+                            break;
+                        }
+                        let (b_id, r_id) = grouped_row_list.row_list[idx];
+                        if b_id > batch_id {
+                            row_list_start_idx = idx;
+                            break;
+                        }
+                        assert_eq!(b_id, batch_id);
+                        row_list.push(r_id);
                     }
-                    let row_list = grouped_row_lists.row_lists[batch_id].clone();
                     if row_list.is_empty() {
                         continue;
                     }
+
+                    // accumulate
                     let row_list_array = UInt64Array::from(row_list);
-                    let filtered_input_cols = input_cols
+                    let filtered_input_cols = input_cols[batch_id]
                         .iter()
                         .map(|c| compute::take(c, &row_list_array, None))
                         .collect::<Result<Vec<_>, _>>()
                         .unwrap();
-                    accumulators[agg_id][group_id]
-                        .update_batch(&filtered_input_cols)
-                        .unwrap();
+                    accumulator.update_batch(&filtered_input_cols).unwrap();
                 }
-            }
-        }
 
-        for accums in &mut accumulators {
-            let output_col_vec = accums
-                .iter_mut()
-                .map(|acc| acc.evaluate().unwrap().to_array())
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
+                // emit output row
+                output_col_vec.push(
+                    accumulator.evaluate().unwrap().to_array().unwrap()
+                );
+            }
+
+            // emit column
             let output_col_ref = output_col_vec
                 .iter()
                 .map(|a| a.as_ref())
@@ -209,7 +209,7 @@ impl Sink for HashAggregateOperator {
         }
 
         let batch = RecordBatch::try_new(self.out_schema.clone(), columns).unwrap();
-        Entry::batch(vec![batch])
+        Entry::batch(vec![Arc::new(batch)])
     }
 }
 
