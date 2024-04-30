@@ -1,5 +1,6 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::common::split_large_batch;
 use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use datafusion::arrow::array::RecordBatch;
@@ -54,7 +55,8 @@ impl Sink for SortOperator {
             .unwrap();
 
         let new_batch = RecordBatch::try_new(combined.schema(), columns).unwrap();
-        Entry::batch(vec![Arc::new(new_batch)])
+        let batch_vec = split_large_batch(&new_batch, 1024);
+        Entry::Batch(batch_vec)
     }
 }
 

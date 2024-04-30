@@ -114,9 +114,9 @@ pub fn tpch_schema(table: &str) -> Schema {
 }
 //the entries coming from different operators for store
 pub enum Entry {
-    batch(Vec<Arc<RecordBatch>>),
-    hash_map(JoinLeftData),
-    empty,
+    Empty,
+    Batch(Vec<Arc<RecordBatch>>),
+    HashMap(JoinLeftData),
 }
 
 pub struct PhysicalToPhysicalVisitor {

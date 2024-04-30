@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::vec;
@@ -14,10 +13,9 @@ use crate::common::enums::physical_operator_type::PhysicalOperatorType;
 use crate::helper::Entry;
 use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink};
 use datafusion::arrow::compute;
-use std::hash::Hash;
 use ahash::RandomState;
 use datafusion::common::hash_utils::create_hashes;
-use crate::common::row_hashmap::{GroupedRowList,GroupedRowHashMap};
+use crate::common::row_hashmap::{grouped_row_hashmap_add_batch, GroupedRowHashMap};
 
 pub struct JoinLeftData {
     pub hash_table: GroupedRowHashMap,
@@ -59,45 +57,7 @@ impl PhysicalOperator for HashJoinBuildOperator {
 
 impl Sink for HashJoinBuildOperator {
     fn sink(&mut self, batch: &Arc<RecordBatch>) -> SinkResultType {
-        let num_rows = batch.num_rows();
-        let keys_values = self
-            .expr
-            .iter()
-            .map(|f| {
-                f.evaluate(batch)
-                    .unwrap()
-                    .into_array(batch.num_rows())
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
-        let mut hashes_buffer: Vec<u64> = Vec::new();
-        hashes_buffer.resize(num_rows, 0);
-        let hash_values =
-            create_hashes(&keys_values, &self.random_state, &mut hashes_buffer).unwrap();
-
-        for row_idx in 0..num_rows {
-            //grab the hash which is the key
-            let hashmap_key = hash_values[row_idx];
-            // the value in the hash table is the row_id
-            let hashmap_value = row_idx as u64;
-
-            //if the key does not exist create a new array
-            if !self.hash_table.contains_key(&hashmap_key) {
-                let mut row_list = Vec::new();
-                row_list.push((self.batch_id, hashmap_value));
-                self.hash_table.insert(
-                    hashmap_key,
-                    GroupedRowList {
-                        row_list
-                    },
-                );
-            } else {
-                //else if the key already exists in the map then just append the value to the
-                let grouped_row_lists = self.hash_table.get_mut(&hashmap_key).unwrap();
-                let row_list = &mut grouped_row_lists.row_list;
-                row_list.push((self.batch_id, hashmap_value));
-            }
-        }
+        grouped_row_hashmap_add_batch(&mut self.hash_table, batch, self.batch_id, &self.expr, &self.random_state);
         //append data to the collector
         self.originals.push(Arc::clone(batch));
         //increase the row counter for next iteration
@@ -116,13 +76,12 @@ impl Sink for HashJoinBuildOperator {
             random_state: self.random_state.clone(),
             originals: std::mem::take(&mut self.originals),
         };
-        Entry::hash_map(join_left_data)
+        Entry::HashMap(join_left_data)
     }
 }
 
 pub struct HashJoinProbeOperator {
     expr: Vec<Arc<dyn PhysicalExpr>>,
-    schema: Arc<Schema>,
     left_side_schema: Arc<Schema>,
     output_schema: Arc<Schema>,
     store : Arc<RefCell<ahash::HashMap<usize, Entry>>>,
@@ -149,23 +108,22 @@ impl HashJoinProbeOperator {
         let output_schema = Arc::new(Schema::new(fields));
         HashJoinProbeOperator {
             expr,
-            schema,
             left_side_schema,
             output_schema,
             store,
             uuid,
-            join_left_data : Entry::empty,
+            join_left_data : Entry::Empty,
         }
     }
 }
 
 impl IntermediateOperator for HashJoinProbeOperator {
     fn execute(&mut self, input: &Arc<RecordBatch>) -> OperatorResultType {
-        if matches!(&self.join_left_data, Entry::empty) {
+        if matches!(&self.join_left_data, Entry::Empty) {
             self.join_left_data = self.store.borrow_mut().remove(&self.uuid).unwrap();
         }
         let join_left_data = match &self.join_left_data {
-            Entry::hash_map(data) => {data}
+            Entry::HashMap(data) => {data}
             _ => {panic!()}
         };
 

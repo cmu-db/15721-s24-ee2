@@ -1,16 +1,14 @@
 use crate::common::enums::operator_result_type::SinkResultType;
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
-use crate::common::row_hashmap::{GroupedRowList,GroupedRowHashMap};
+use crate::common::row_hashmap::{grouped_row_hashmap_add_batch, GroupedRowHashMap};
+use crate::common::split_large_batch;
 use crate::helper::Entry;
 use crate::physical_operator::{PhysicalOperator, Sink};
 use ahash::random_state::RandomState;
 use datafusion::arrow::array::{RecordBatch, UInt64Array};
 use datafusion::arrow::compute;
 use datafusion::arrow::datatypes::{Field, Schema};
-use datafusion::common::hash_utils::create_hashes;
 use datafusion::physical_expr::{AggregateExpr, PhysicalExpr};
-use std::collections::HashMap;
-use std::iter::repeat;
 use std::sync::Arc;
 
 pub struct HashAggregateOperator {
@@ -18,7 +16,7 @@ pub struct HashAggregateOperator {
     aggregate_expr: Vec<Arc<dyn AggregateExpr>>,
 
     //the group by expr e.g. GROUP BY colA, colB
-    group_by_expr: Vec<(Arc<dyn PhysicalExpr>, String)>,
+    group_by_expr: Vec<Arc<dyn PhysicalExpr>>,
 
     out_schema: Arc<Schema>,
 
@@ -52,9 +50,10 @@ impl HashAggregateOperator {
             fields.push(expr.field().unwrap());
         }
         let out_schema = Arc::new(Schema::new(fields));
+        let group_by_expr_only = group_by_expr.iter().map(|(f, _name)| Arc::clone(f)).collect::<Vec<_>>();
         Self {
             aggregate_expr,
-            group_by_expr,
+            group_by_expr: group_by_expr_only,
             out_schema,
             originals: Vec::new(),
             batch_id: 0,
@@ -66,45 +65,8 @@ impl HashAggregateOperator {
 
 impl Sink for HashAggregateOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
-        let num_rows = input.num_rows();
-        let keys_values = self
-            .group_by_expr
-            .iter()
-            .map(|(f, _name)| {
-                f.evaluate(input)
-                    .unwrap()
-                    .into_array(input.num_rows())
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
-        let mut hashes_buffer: Vec<u64> = Vec::new();
-        hashes_buffer.resize(num_rows, 0);
-        let hash_values =
-            create_hashes(&keys_values, &self.random_state, &mut hashes_buffer).unwrap();
-
-        for row_idx in 0..num_rows {
-            //grab the hash which is the key
-            let hashmap_key = hash_values[row_idx];
-            // the value in the hash table is the row_id
-            let hashmap_value = row_idx as u64;
-
-            //if the key does not exist create a new array
-            if !self.hash_table.contains_key(&hashmap_key) {
-                let mut row_list = Vec::new();
-                row_list.push((self.batch_id, hashmap_value));
-                self.hash_table.insert(
-                    hashmap_key,
-                    GroupedRowList {
-                        row_list
-                    },
-                );
-            } else {
-                //else if the key already exists in the map then just append the value to the
-                let grouped_row_lists = self.hash_table.get_mut(&hashmap_key).unwrap();
-                let row_list = &mut grouped_row_lists.row_list;
-                row_list.push((self.batch_id, hashmap_value));
-            }
-        }
+        
+        grouped_row_hashmap_add_batch(&mut self.hash_table, input, self.batch_id, &self.group_by_expr, &self.random_state);
 
         //append data to the collector
         self.originals.push(input.as_ref().clone());
@@ -134,7 +96,7 @@ impl Sink for HashAggregateOperator {
             let representative_batch =
                 compute::concat_batches(&self.originals[0].schema(), &representative_rows_vec)
                     .unwrap();
-            for (group_by, _name) in &self.group_by_expr {
+            for group_by in &self.group_by_expr {
                 let group_by_column = group_by
                     .evaluate(&representative_batch)
                     .and_then(|v| v.into_array(num_output_rows))
@@ -146,10 +108,10 @@ impl Sink for HashAggregateOperator {
         // aggregate cols
         let num_batches = self.originals.len();
         // Each agg_expr emits one output column
-        for (agg_id, agg_expr) in self.aggregate_expr.iter().enumerate() {
+        for agg_expr in self.aggregate_expr.iter() {
             // Create input_cols for each batch
             let input_exprs = agg_expr.expressions();
-            let mut input_cols = self.originals.iter().map(|batch| {
+            let input_cols = self.originals.iter().map(|batch| {
                 input_exprs.iter().map(|e| {
                     e.evaluate(batch).and_then(|v| v.into_array(batch.num_rows()))
                 }).collect::<Result<Vec<_>,_>>().unwrap()
@@ -157,7 +119,7 @@ impl Sink for HashAggregateOperator {
 
             let mut output_col_vec = Vec::with_capacity(num_output_rows);
             // Each grouped_row_list emits one output row
-            for (group_id, (_, grouped_row_list)) in self.hash_table.iter().enumerate() {
+            for (_, grouped_row_list) in self.hash_table.iter() {
                 // Create accumulator
                 let mut accumulator = agg_expr.create_accumulator().unwrap();
 
@@ -209,7 +171,8 @@ impl Sink for HashAggregateOperator {
         }
 
         let batch = RecordBatch::try_new(self.out_schema.clone(), columns).unwrap();
-        Entry::batch(vec![Arc::new(batch)])
+        let batch_vec = split_large_batch(&batch, 1024);
+        Entry::Batch(batch_vec)
     }
 }
 

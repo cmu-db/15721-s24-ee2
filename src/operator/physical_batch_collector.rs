@@ -34,7 +34,7 @@ impl Sink for PhysicalBatchCollector {
     }
 
     fn finalize(&mut self) -> Entry {
-        Entry::empty
+        Entry::Empty
     }
 }
 

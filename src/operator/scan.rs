@@ -216,7 +216,7 @@ impl ScanIntermediatesOperator {
             uuid,
             schema,
             store,
-            entry: Entry::empty,
+            entry: Entry::Empty,
         }
     }
 }
@@ -233,14 +233,14 @@ impl PhysicalOperator for ScanIntermediatesOperator {
 impl Source for ScanIntermediatesOperator {
     fn get_data(&mut self) -> SourceResultType {
         match &mut self.entry {
-            Entry::batch(_) => {}
-            Entry::empty => {
+            Entry::Batch(_) => {}
+            Entry::Empty => {
                 let mut binding = self.store.borrow_mut();
                 self.entry = binding.remove(&self.uuid).unwrap();
             }
             _ => panic!("bug"),
         }
-        if let Entry::batch(ref mut batch) = self.entry {
+        if let Entry::Batch(ref mut batch) = self.entry {
             let b = batch.pop();
             match b {
                 None => SourceResultType::Finished,

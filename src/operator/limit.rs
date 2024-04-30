@@ -58,7 +58,7 @@ impl Sink for LimitOperator {
     }
 
     fn finalize(&mut self) -> Entry {
-        Entry::batch(std::mem::take(&mut self.originals))
+        Entry::Batch(std::mem::take(&mut self.originals))
     }
 }
 
