@@ -6,6 +6,7 @@ use std::vec;
 use crate::operator::filter::FilterOperator;
 use crate::operator::hash_aggregate::HashAggregateOperator;
 use crate::operator::hash_join::{HashJoinBuildOperator, HashJoinProbeOperator, JoinLeftData};
+use crate::operator::limit::LimitOperator;
 use crate::operator::placeholder::PlaceholderOperator;
 use crate::operator::projection::ProjectionOperator;
 use crate::operator::scan::{ScanIntermediatesOperator, ScanOperator};
@@ -18,7 +19,6 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::physical_plan::aggregates::AggregateMode;
 use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanVisitor};
-use crate::operator::limit::LimitOperator;
 
 //return the schema of the region table in TPCH
 pub fn tpch_schema(table: &str) -> Schema {
@@ -123,7 +123,7 @@ pub struct PhysicalToPhysicalVisitor {
     pub pipelines: Vec<Pipeline>,
     pub next_pipeline_number: usize,
     pub store: Arc<RefCell<HashMap<usize, Entry>>>,
-    pub stack : Vec<usize>,
+    pub stack: Vec<usize>,
 }
 impl PhysicalToPhysicalVisitor {
     pub fn new() -> Self {
@@ -131,7 +131,7 @@ impl PhysicalToPhysicalVisitor {
             pipelines: vec![],
             next_pipeline_number: 0,
             store: Arc::new(RefCell::new(HashMap::new())),
-            stack : vec![],
+            stack: vec![],
         }
     }
 }

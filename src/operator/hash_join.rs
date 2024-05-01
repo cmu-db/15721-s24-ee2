@@ -1,8 +1,8 @@
+use ahash;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::vec;
-use ahash;
 
 use datafusion::arrow::array::{Array, RecordBatch, UInt64Array};
 use datafusion::arrow::datatypes::{Field, Schema};
@@ -10,12 +10,12 @@ use datafusion::physical_plan::PhysicalExpr;
 
 use crate::common::enums::operator_result_type::{OperatorResultType, SinkResultType};
 use crate::common::enums::physical_operator_type::PhysicalOperatorType;
+use crate::common::row_hashmap::{grouped_row_hashmap_add_batch, GroupedRowHashMap};
 use crate::helper::Entry;
 use crate::physical_operator::{IntermediateOperator, PhysicalOperator, Sink};
-use datafusion::arrow::compute;
 use ahash::RandomState;
+use datafusion::arrow::compute;
 use datafusion::common::hash_utils::create_hashes;
-use crate::common::row_hashmap::{grouped_row_hashmap_add_batch, GroupedRowHashMap};
 
 pub struct JoinLeftData {
     pub hash_table: GroupedRowHashMap,
@@ -29,7 +29,7 @@ pub struct HashJoinBuildOperator {
     pub hash_table: GroupedRowHashMap,
     pub originals: Vec<Arc<RecordBatch>>,
     batch_id: usize,
-    random_state: RandomState
+    random_state: RandomState,
 }
 
 impl HashJoinBuildOperator {
@@ -57,7 +57,13 @@ impl PhysicalOperator for HashJoinBuildOperator {
 
 impl Sink for HashJoinBuildOperator {
     fn sink(&mut self, batch: &Arc<RecordBatch>) -> SinkResultType {
-        grouped_row_hashmap_add_batch(&mut self.hash_table, batch, self.batch_id, &self.expr, &self.random_state);
+        grouped_row_hashmap_add_batch(
+            &mut self.hash_table,
+            batch,
+            self.batch_id,
+            &self.expr,
+            &self.random_state,
+        );
         //append data to the collector
         self.originals.push(Arc::clone(batch));
         //increase the row counter for next iteration
@@ -84,18 +90,18 @@ pub struct HashJoinProbeOperator {
     expr: Vec<Arc<dyn PhysicalExpr>>,
     left_side_schema: Arc<Schema>,
     output_schema: Arc<Schema>,
-    store : Arc<RefCell<ahash::HashMap<usize, Entry>>>,
-    uuid : usize,
-    join_left_data : Entry,
+    store: Arc<RefCell<ahash::HashMap<usize, Entry>>>,
+    uuid: usize,
+    join_left_data: Entry,
 }
 
 impl HashJoinProbeOperator {
     pub fn new(
         expr: Vec<Arc<dyn PhysicalExpr>>,
         schema: Arc<Schema>,
-        left_side_schema : Arc<Schema>,
-        store : Arc<RefCell<ahash::HashMap<usize,Entry>>>,
-        uuid : usize,
+        left_side_schema: Arc<Schema>,
+        store: Arc<RefCell<ahash::HashMap<usize, Entry>>>,
+        uuid: usize,
     ) -> Self {
         let num_output_fields = left_side_schema.fields.len() + schema.fields().len();
         let mut fields: Vec<Field> = Vec::with_capacity(num_output_fields);
@@ -112,7 +118,7 @@ impl HashJoinProbeOperator {
             output_schema,
             store,
             uuid,
-            join_left_data : Entry::Empty,
+            join_left_data: Entry::Empty,
         }
     }
 }
@@ -123,8 +129,10 @@ impl IntermediateOperator for HashJoinProbeOperator {
             self.join_left_data = self.store.borrow_mut().remove(&self.uuid).unwrap();
         }
         let join_left_data = match &self.join_left_data {
-            Entry::HashMap(data) => {data}
-            _ => {panic!()}
+            Entry::HashMap(data) => data,
+            _ => {
+                panic!()
+            }
         };
 
         let num_rows = input.num_rows();
@@ -140,8 +148,12 @@ impl IntermediateOperator for HashJoinProbeOperator {
             .collect::<Vec<_>>();
         let mut hashes_buffer: Vec<u64> = Vec::new();
         hashes_buffer.resize(num_rows, 0);
-        let hash_values =
-            create_hashes(&keys_values, &join_left_data.random_state, &mut hashes_buffer).unwrap();
+        let hash_values = create_hashes(
+            &keys_values,
+            &join_left_data.random_state,
+            &mut hashes_buffer,
+        )
+        .unwrap();
 
         let num_left_batches = join_left_data.originals.len();
         let mut left_indices_vec: Vec<Vec<u64>> = Vec::new();
@@ -160,7 +172,9 @@ impl IntermediateOperator for HashJoinProbeOperator {
             }
         }
         if right_indices_vec.is_empty() {
-            return OperatorResultType::Finished(Arc::new(RecordBatch::new_empty(self.output_schema.clone())));
+            return OperatorResultType::Finished(Arc::new(RecordBatch::new_empty(
+                self.output_schema.clone(),
+            )));
         }
 
         let mut columns: Vec<Arc<dyn Array>> =
@@ -177,8 +191,10 @@ impl IntermediateOperator for HashJoinProbeOperator {
                 let left_indices = UInt64Array::from(left_indices_vec[batch_id].clone());
                 let col_fragment = compute::take(
                     join_left_data.originals[batch_id].column(left_col_idx),
-                    &left_indices, None
-                ).unwrap();
+                    &left_indices,
+                    None,
+                )
+                .unwrap();
                 col_fragments.push(col_fragment);
             }
             let col_fragments_ref = col_fragments.iter().map(|a| a.as_ref()).collect::<Vec<_>>();

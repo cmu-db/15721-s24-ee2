@@ -30,8 +30,6 @@ pub struct HashAggregateOperator {
     random_state: RandomState,
 }
 
-
-
 impl HashAggregateOperator {
     pub fn new(
         input_schema: Arc<Schema>,
@@ -50,7 +48,10 @@ impl HashAggregateOperator {
             fields.push(expr.field().unwrap());
         }
         let out_schema = Arc::new(Schema::new(fields));
-        let group_by_expr_only = group_by_expr.iter().map(|(f, _name)| Arc::clone(f)).collect::<Vec<_>>();
+        let group_by_expr_only = group_by_expr
+            .iter()
+            .map(|(f, _name)| Arc::clone(f))
+            .collect::<Vec<_>>();
         Self {
             aggregate_expr,
             group_by_expr: group_by_expr_only,
@@ -65,8 +66,13 @@ impl HashAggregateOperator {
 
 impl Sink for HashAggregateOperator {
     fn sink(&mut self, input: &Arc<RecordBatch>) -> SinkResultType {
-        
-        grouped_row_hashmap_add_batch(&mut self.hash_table, input, self.batch_id, &self.group_by_expr, &self.random_state);
+        grouped_row_hashmap_add_batch(
+            &mut self.hash_table,
+            input,
+            self.batch_id,
+            &self.group_by_expr,
+            &self.random_state,
+        );
 
         //append data to the collector
         self.originals.push(input.as_ref().clone());
@@ -111,11 +117,20 @@ impl Sink for HashAggregateOperator {
         for agg_expr in self.aggregate_expr.iter() {
             // Create input_cols for each batch
             let input_exprs = agg_expr.expressions();
-            let input_cols = self.originals.iter().map(|batch| {
-                input_exprs.iter().map(|e| {
-                    e.evaluate(batch).and_then(|v| v.into_array(batch.num_rows()))
-                }).collect::<Result<Vec<_>,_>>().unwrap()
-            }).collect::<Vec<_>>();
+            let input_cols = self
+                .originals
+                .iter()
+                .map(|batch| {
+                    input_exprs
+                        .iter()
+                        .map(|e| {
+                            e.evaluate(batch)
+                                .and_then(|v| v.into_array(batch.num_rows()))
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
 
             let mut output_col_vec = Vec::with_capacity(num_output_rows);
             // Each grouped_row_list emits one output row
@@ -156,9 +171,7 @@ impl Sink for HashAggregateOperator {
                 }
 
                 // emit output row
-                output_col_vec.push(
-                    accumulator.evaluate().unwrap().to_array().unwrap()
-                );
+                output_col_vec.push(accumulator.evaluate().unwrap().to_array().unwrap());
             }
 
             // emit column

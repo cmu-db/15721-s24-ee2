@@ -8,7 +8,7 @@ use datafusion::common::arrow::util::pretty;
 use std::sync::Arc;
 
 pub struct PhysicalBatchCollector {
-    result: Vec<RecordBatch>,
+    pub result: Vec<RecordBatch>,
 }
 
 impl PhysicalBatchCollector {
