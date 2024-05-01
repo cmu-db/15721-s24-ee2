@@ -1,5 +1,5 @@
 use ahash::{HashMap, HashMapExt};
-use datafusion::arrow::array::{Array, Int32Array, Int64Array};
+use datafusion::arrow::array::{Array, Int64Array};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::DFSchema;
 use datafusion::execution::context::ExecutionProps;
@@ -85,7 +85,7 @@ fn hash_aggregate() {
     let result = store.borrow_mut().remove(&pipeline_number).unwrap();
     match result {
         Entry::Batch(mut batches) => {
-            let mut batch = Arc::unwrap_or_clone(batches.pop().unwrap());
+            let batch = Arc::unwrap_or_clone(batches.pop().unwrap());
             let aggregated_column = batch
                 .column(1)
                 .as_any()
