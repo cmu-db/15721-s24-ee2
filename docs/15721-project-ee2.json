@@ -1,0 +1,21 @@
+{
+    "info": {
+        "title":    "Push-based Vectorized Execution Engine compatible with Apache Datafusion",
+        "github":   "https://github.com/cmu-db/15721-s24-ee2",
+        "description":  "This project is an execution engine for OLAP queries based on Apache Datafusion and Arrow. It uses push-based vectorized model and custom hashing strategy for aggregates and equi-joins.",
+        "students": [
+            {
+                "name": "Christos Laspias",
+                "url": "https://www.linkedin.com/in/christos-laspias-1402a121b/"
+            },
+            {
+                "name": "Hyoungjoo Kim",
+                "url": "https://hyoungjook.github.io"
+            },
+            {
+                "name": "Yash Kothari",
+                "url": "https://CHANGE_ME"
+            }
+        ]
+    }
+}
